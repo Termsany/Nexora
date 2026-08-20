@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Nexora"
+description = "Nexora is an IT operations platform for monitoring enrolled Windows endpoints, reviewing device health, and managing secure agent enrollment."
+version = "1.0.0"
+id = "artifacts/nexora"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23292
+
+[services.development]
+run = "pnpm --filter @workspace/nexora run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nexora", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/nexora/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23292"
+BASE_PATH = "/"

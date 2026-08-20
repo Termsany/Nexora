@@ -1,0 +1,2313 @@
+# MASTER PROMPT — NEXORA AGENT V1 + PLATFORM FOUNDATION
+
+You are a senior full-stack software architect, RMM platform engineer, Windows systems engineer, DevOps engineer, and security-focused backend developer.
+
+Your task is to design and implement the first production-quality foundation of a modern Remote Monitoring and Management platform named:
+
+# Nexora
+
+This platform will eventually provide capabilities similar in category to products such as Atera, NinjaOne, ManageEngine, and other RMM / IT management platforms.
+
+However, this project must be independently designed and implemented.
+
+Do NOT copy proprietary code, UI, terminology, assets, or implementation details from any commercial product.
+
+The purpose of this milestone is NOT to build the complete RMM platform.
+
+The purpose is to create:
+
+# Agent V1 + Platform Foundation
+
+The first milestone must establish a clean, secure, extensible architecture that can later support:
+
+* Endpoint monitoring
+* Asset inventory
+* Remote commands
+* PowerShell execution
+* Patch management
+* Software deployment
+* Alerting
+* Automation
+* Ticketing
+* Active Directory integration
+* Network monitoring
+* SNMP
+* MikroTik integration
+* Remote access
+* Reporting
+* AI-assisted diagnostics
+
+Do not implement these advanced capabilities yet unless explicitly required by this specification.
+
+---
+
+# 1. CORE ARCHITECTURAL PRINCIPLE
+
+Replit is being used ONLY as a development environment.
+
+The application MUST NOT depend on Replit-specific infrastructure.
+
+The entire project must be portable.
+
+It must be possible to clone the source code later and deploy it to:
+
+* AWS
+* Azure
+* Any Linux VM
+* Docker host
+* On-premises server
+
+without rewriting the application.
+
+The following command should eventually be enough to run the development platform:
+
+```bash
+docker compose up -d
+```
+
+Avoid vendor lock-in.
+
+All infrastructure settings must use environment variables.
+
+Examples:
+
+```env
+DATABASE_URL=
+API_BASE_URL=
+JWT_SECRET=
+ENROLLMENT_SECRET=
+CORS_ALLOWED_ORIGINS=
+APP_ENV=
+LOG_LEVEL=
+```
+
+Never hard-code Replit URLs.
+
+Never hard-code database credentials.
+
+Never hard-code API secrets.
+
+---
+
+# 2. TECH STACK
+
+Use the following architecture unless there is an extremely strong technical reason not to.
+
+## Frontend
+
+* React
+* TypeScript
+* Vite
+* Tailwind CSS
+* React Router
+* TanStack Query
+
+Prefer a clean enterprise dashboard architecture.
+
+Do not overuse third-party UI libraries.
+
+The dashboard must be responsive.
+
+---
+
+## Backend
+
+Use:
+
+* Python 3.12+
+* FastAPI
+* SQLAlchemy 2.x
+* Pydantic
+* Alembic
+* PostgreSQL
+
+Use async database access where practical.
+
+Architecture should follow clear separation between:
+
+```text
+API
+Services
+Repositories
+Models
+Schemas
+Security
+Configuration
+```
+
+Avoid putting business logic directly inside route handlers.
+
+---
+
+## Database
+
+PostgreSQL.
+
+All database schema changes must use Alembic migrations.
+
+Do NOT rely on automatic database table generation in production.
+
+---
+
+## Windows Agent
+
+Use:
+
+# .NET 8 C#
+
+The Windows agent must be implemented as a:
+
+# .NET Worker Service
+
+capable of running as a Windows Service.
+
+Target architecture:
+
+```text
+Nexora.Agent
+```
+
+Eventually compiled into:
+
+```text
+nexora-agent.exe
+```
+
+Windows Service display name:
+
+```text
+Nexora Agent
+```
+
+Windows Service internal name:
+
+```text
+NexoraAgent
+```
+
+---
+
+# 3. REPOSITORY STRUCTURE
+
+Create a monorepo.
+
+Recommended structure:
+
+```text
+nexora/
+│
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   └── v1/
+│   │   │
+│   │   ├── core/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   ├── repositories/
+│   │   ├── security/
+│   │   ├── db/
+│   │   └── main.py
+│   │
+│   ├── migrations/
+│   ├── tests/
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── frontend/
+│   ├── src/
+│   │   ├── api/
+│   │   ├── components/
+│   │   ├── layouts/
+│   │   ├── pages/
+│   │   ├── hooks/
+│   │   ├── types/
+│   │   └── utils/
+│   │
+│   ├── package.json
+│   └── Dockerfile
+│
+├── agent/
+│   ├── Nexora.Agent/
+│   ├── Nexora.Agent.Tests/
+│   └── Nexora.Agent.sln
+│
+├── database/
+│
+├── docs/
+│   ├── architecture.md
+│   ├── agent-protocol.md
+│   ├── security-model.md
+│   └── deployment.md
+│
+├── scripts/
+│
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+├── README.md
+└── LICENSE
+```
+
+Adjust this structure only where technically justified.
+
+---
+
+# 4. FIRST MILESTONE OBJECTIVE
+
+The system must successfully complete the following lifecycle:
+
+```text
+Install Agent
+     ↓
+Start Windows Service
+     ↓
+Generate persistent device identity
+     ↓
+Enroll securely with Nexora API
+     ↓
+Receive Agent ID
+     ↓
+Store local credentials securely
+     ↓
+Send system inventory
+     ↓
+Send heartbeat
+     ↓
+Send metrics
+     ↓
+Device appears in Dashboard
+     ↓
+Device shows ONLINE
+     ↓
+Stop Agent
+     ↓
+Timeout occurs
+     ↓
+Device shows OFFLINE
+     ↓
+Restart Agent
+     ↓
+Device returns ONLINE
+```
+
+Do not expand the milestone until this works reliably.
+
+---
+
+# 5. AGENT IDENTITY MODEL
+
+Every endpoint must have a persistent identity.
+
+Do NOT identify a device only using:
+
+* Hostname
+* IP address
+* MAC address
+
+because these values can change.
+
+Generate a persistent local device identifier.
+
+Possible identity inputs may include:
+
+* Windows MachineGuid
+* generated UUID
+* hardware identifiers
+
+However:
+
+Do NOT expose sensitive hardware information unnecessarily.
+
+Generate a Nexora device UUID and persist it.
+
+Example:
+
+```text
+550e8400-e29b-41d4-a716-446655440000
+```
+
+The backend should also generate a human-readable Agent ID.
+
+Example:
+
+```text
+NX-000001
+```
+
+Never rely on sequential ID alone for authentication.
+
+---
+
+# 6. AGENT ENROLLMENT
+
+Implement secure device enrollment.
+
+Initial endpoint:
+
+```http
+POST /api/v1/agents/enroll
+```
+
+The agent sends:
+
+```json
+{
+  "enrollment_token": "...",
+  "device_uuid": "...",
+  "hostname": "...",
+  "machine_guid_hash": "...",
+  "agent_version": "0.1.0"
+}
+```
+
+Do NOT send raw machine identifiers if a cryptographic hash can be used instead.
+
+Successful response should include:
+
+```json
+{
+  "agent_id": "NX-000001",
+  "device_id": "uuid",
+  "agent_token": "...",
+  "api_base_url": "...",
+  "heartbeat_interval_seconds": 30
+}
+```
+
+The global enrollment token MUST NOT be used for future API calls.
+
+After enrollment:
+
+The agent must authenticate using its own unique credentials.
+
+Store only hashed agent authentication secrets on the backend where appropriate.
+
+---
+
+# 7. AGENT AUTHENTICATION
+
+Every agent request after enrollment must be authenticated.
+
+Do NOT accept unauthenticated heartbeats.
+
+Possible implementation:
+
+```http
+Authorization: Bearer <agent-token>
+```
+
+Design the authentication layer so it can later migrate to:
+
+* rotating credentials
+* signed requests
+* certificates
+* mTLS
+
+without redesigning the database.
+
+For V1, secure bearer credentials over HTTPS are acceptable.
+
+Never log authentication tokens.
+
+---
+
+# 8. HEARTBEAT
+
+Endpoint:
+
+```http
+POST /api/v1/agents/heartbeat
+```
+
+Default interval:
+
+```text
+30 seconds
+```
+
+Payload example:
+
+```json
+{
+  "agent_version": "0.1.0",
+  "timestamp_utc": "2026-08-20T12:30:00Z",
+  "uptime_seconds": 153228,
+  "logged_in_user": "salma"
+}
+```
+
+Backend updates:
+
+```text
+last_seen_at
+status
+last_agent_version
+last_logged_in_user
+```
+
+Do not trust timestamps supplied by the agent for determining online status.
+
+Use backend receive time as authoritative.
+
+---
+
+# 9. ONLINE / OFFLINE LOGIC
+
+Do NOT store ONLINE/OFFLINE as the only source of truth.
+
+Derive device health from:
+
+```text
+last_seen_at
+```
+
+Default policy:
+
+```text
+Heartbeat interval = 30 seconds
+
+ONLINE:
+last_seen < 90 seconds
+
+OFFLINE:
+last_seen >= 120 seconds
+```
+
+Allow thresholds to become configurable later.
+
+Dashboard must visually distinguish:
+
+```text
+ONLINE
+OFFLINE
+UNKNOWN
+```
+
+---
+
+# 10. INVENTORY COLLECTION
+
+Endpoint:
+
+```http
+POST /api/v1/agents/inventory
+```
+
+Agent V1 must collect:
+
+## Identity
+
+```text
+Hostname
+Device UUID
+Agent version
+```
+
+## User
+
+```text
+Currently logged-in user
+Domain
+```
+
+## Operating System
+
+```text
+Windows edition
+Windows version
+Build number
+Architecture
+Installation type
+```
+
+## Hardware
+
+```text
+CPU model
+CPU logical processors
+Total physical RAM
+System manufacturer
+System model
+BIOS version
+```
+
+Use safe Windows-native APIs whenever possible.
+
+Avoid deprecated WMI calls when modern alternatives exist.
+
+WMI/CIM can still be used where appropriate.
+
+---
+
+# 11. DISK INVENTORY
+
+Collect local fixed disks.
+
+For every disk:
+
+```text
+Drive letter
+Filesystem
+Total bytes
+Used bytes
+Free bytes
+Usage percentage
+```
+
+Example:
+
+```json
+{
+  "drive": "C:",
+  "filesystem": "NTFS",
+  "total_bytes": 512000000000,
+  "free_bytes": 120000000000,
+  "used_percent": 76.5
+}
+```
+
+Avoid sending unnecessary file-level information.
+
+---
+
+# 12. NETWORK INVENTORY
+
+Collect:
+
+```text
+Primary IPv4
+MAC address
+Gateway
+DNS servers
+Interface name
+Interface type
+```
+
+Do not include:
+
+```text
+169.254.x.x
+loopback
+disabled adapters
+irrelevant virtual adapters
+```
+
+unless specifically necessary.
+
+Design this collector so additional adapters can be supported later.
+
+---
+
+# 13. METRICS
+
+Endpoint:
+
+```http
+POST /api/v1/agents/metrics
+```
+
+Agent V1 should collect:
+
+```text
+CPU usage percentage
+RAM used percentage
+RAM used bytes
+RAM available bytes
+Disk usage
+System uptime
+```
+
+Initial collection interval:
+
+```text
+30 seconds
+```
+
+Do NOT collect high-frequency telemetry yet.
+
+We are not building Prometheus at this stage.
+
+---
+
+# 14. METRICS DATABASE DESIGN
+
+Avoid creating a database row explosion unnecessarily.
+
+Create a clean metrics model suitable for small initial deployment.
+
+Design it so retention policies can later be introduced.
+
+Recommended concepts:
+
+```text
+device_metrics
+device_disk_metrics
+```
+
+Each metric must include:
+
+```text
+device_id
+captured_at
+received_at
+```
+
+Do not trust client-side timestamp exclusively.
+
+---
+
+# 15. DATABASE DOMAIN MODEL
+
+At minimum create models for:
+
+```text
+users
+devices
+agents
+agent_credentials
+device_inventory
+device_network_interfaces
+device_disks
+device_metrics
+device_status_events
+enrollment_tokens
+audit_logs
+```
+
+Design primary keys using UUIDs where appropriate.
+
+Human-readable Agent IDs should be a separate field.
+
+---
+
+# 16. DEVICE MODEL
+
+Suggested fields:
+
+```text
+id UUID
+agent_id
+device_uuid
+hostname
+
+status
+
+last_seen_at
+first_seen_at
+
+current_user
+domain
+
+os_name
+os_version
+os_build
+architecture
+
+agent_version
+
+created_at
+updated_at
+```
+
+Do not create duplicate devices when:
+
+```text
+hostname changes
+IP changes
+user changes
+```
+
+Device UUID is authoritative.
+
+---
+
+# 17. STATUS EVENTS
+
+Track meaningful device status changes.
+
+Example:
+
+```text
+ONLINE → OFFLINE
+OFFLINE → ONLINE
+```
+
+Store:
+
+```text
+device_id
+previous_status
+new_status
+event_timestamp
+```
+
+Avoid creating status event rows every heartbeat.
+
+Only create rows when status transitions.
+
+---
+
+# 18. AUDIT LOG FOUNDATION
+
+Create an audit log architecture now.
+
+Even though remote commands are not implemented yet.
+
+Suggested fields:
+
+```text
+id
+actor_type
+actor_id
+action
+entity_type
+entity_id
+metadata
+ip_address
+created_at
+```
+
+Future sensitive actions must be auditable.
+
+---
+
+# 19. WEB APPLICATION AUTHENTICATION
+
+Implement basic administrator authentication.
+
+Initial V1:
+
+```text
+Email
+Password
+```
+
+Passwords must use a strong password hashing algorithm.
+
+Prefer:
+
+```text
+Argon2id
+```
+
+or a reputable secure alternative.
+
+Never store plain-text passwords.
+
+Implement:
+
+```text
+Login
+Logout
+Current User
+Protected Routes
+```
+
+Architecture must allow future:
+
+```text
+RBAC
+SSO
+Active Directory
+Microsoft Entra ID
+MFA
+```
+
+---
+
+# 20. ROLES
+
+Create RBAC foundation.
+
+Initial roles:
+
+```text
+super_admin
+admin
+technician
+viewer
+```
+
+For Agent V1 only super_admin/admin need meaningful access.
+
+Do not over-engineer permissions yet.
+
+---
+
+# 21. FRONTEND — OVERALL DESIGN
+
+Create a polished enterprise IT management interface.
+
+Avoid:
+
+* giant cards
+* excessive rounded corners
+* childish colors
+* huge typography
+* excessive gradients
+* unnecessary animation
+* marketing-style landing page aesthetics
+
+This is an operational IT console.
+
+Design priority:
+
+```text
+Information density
+Clarity
+Fast navigation
+Operational visibility
+Professional appearance
+```
+
+Use a modern dark/light compatible design architecture.
+
+Initial release may default to dark mode.
+
+---
+
+# 22. APPLICATION SHELL
+
+Create:
+
+```text
+Left sidebar
+Top header
+Main content area
+```
+
+Sidebar:
+
+```text
+Overview
+Devices
+Alerts
+Automation
+Patch Management
+Software
+Network
+Tickets
+Reports
+Administration
+```
+
+Only enable:
+
+```text
+Overview
+Devices
+Administration
+```
+
+for now.
+
+Other sections may display:
+
+```text
+Coming Soon
+```
+
+Do not implement fake functionality.
+
+---
+
+# 23. OVERVIEW DASHBOARD
+
+Dashboard should show:
+
+```text
+Total Devices
+Online Devices
+Offline Devices
+Unknown Devices
+```
+
+Also show:
+
+```text
+Average CPU
+Average RAM
+Devices with Disk > 85%
+```
+
+Create:
+
+```text
+Recent Devices
+Recent Status Changes
+```
+
+Everything must use real backend data.
+
+No fake static metrics after database initialization.
+
+---
+
+# 24. DEVICES PAGE
+
+Create a professional device table.
+
+Columns:
+
+```text
+Status
+Hostname
+User
+Operating System
+IP Address
+CPU
+RAM
+Disk
+Agent Version
+Last Seen
+```
+
+Features:
+
+```text
+Search
+Status filter
+Pagination
+Sorting
+```
+
+Status indicator:
+
+```text
+Green dot = Online
+Red dot = Offline
+Gray dot = Unknown
+```
+
+Clicking a row opens the device details page.
+
+---
+
+# 25. DEVICE DETAILS
+
+Route:
+
+```text
+/devices/:deviceId
+```
+
+Header:
+
+```text
+Hostname
+Online status
+User
+IP
+OS
+Agent version
+Last seen
+```
+
+Create tabs:
+
+```text
+Overview
+Hardware
+Disks
+Network
+Activity
+```
+
+Do not implement:
+
+```text
+Processes
+Services
+Patches
+Software
+Remote Shell
+```
+
+yet.
+
+They can be added later.
+
+---
+
+# 26. DEVICE OVERVIEW
+
+Display:
+
+```text
+CPU
+RAM
+Disk
+Uptime
+```
+
+Also:
+
+```text
+Current user
+Domain
+Operating system
+Architecture
+First seen
+Last seen
+Agent version
+```
+
+Include simple metric history.
+
+Only implement history if actual stored metrics exist.
+
+---
+
+# 27. HARDWARE TAB
+
+Show:
+
+```text
+Manufacturer
+Model
+CPU
+Logical processors
+Total RAM
+BIOS
+Architecture
+```
+
+---
+
+# 28. DISKS TAB
+
+Table:
+
+```text
+Drive
+Filesystem
+Capacity
+Used
+Free
+Usage %
+```
+
+Visually highlight disks above:
+
+```text
+85%
+```
+
+This is informational only.
+
+No alert system yet.
+
+---
+
+# 29. NETWORK TAB
+
+Display:
+
+```text
+Interface
+IPv4
+MAC
+Gateway
+DNS
+Interface type
+```
+
+---
+
+# 30. ACTIVITY TAB
+
+Show:
+
+```text
+First enrollment
+Online events
+Offline events
+Inventory update
+Agent reconnect
+```
+
+Do not create artificial entries.
+
+---
+
+# 31. ADMINISTRATION
+
+Create administration pages for:
+
+```text
+Users
+Enrollment Tokens
+System Information
+```
+
+Enrollment Tokens page must allow administrator to create an enrollment token.
+
+Example:
+
+```text
+Name:
+Office Deployment
+
+Expiration:
+7 days
+
+Maximum Uses:
+50
+```
+
+Backend stores token securely.
+
+Show raw token only once after creation.
+
+Do not store retrievable plain-text tokens.
+
+---
+
+# 32. SECURITY REQUIREMENTS
+
+Treat the agent as security-sensitive software.
+
+Apply:
+
+```text
+HTTPS only in production
+Authentication on every agent endpoint
+Rate limiting readiness
+Input validation
+Payload size restrictions
+No shell execution in V1
+No arbitrary command execution in V1
+No remote file upload in V1
+No remote code execution in V1
+```
+
+All API payloads must be validated.
+
+Never deserialize arbitrary object types.
+
+---
+
+# 33. AGENT LOCAL STORAGE
+
+The agent must persist:
+
+```text
+device_uuid
+agent_id
+agent_token
+api_url
+```
+
+Store secrets using Windows-native secure storage where practical.
+
+Prefer:
+
+```text
+Windows DPAPI
+```
+
+Do not store agent credentials in plain text.
+
+Configuration can be located under something similar to:
+
+```text
+C:\ProgramData\Nexora\Agent\
+```
+
+Logs:
+
+```text
+C:\ProgramData\Nexora\Agent\Logs\
+```
+
+Do not store secrets in logs.
+
+---
+
+# 34. WINDOWS SERVICE BEHAVIOR
+
+The agent must:
+
+```text
+Start automatically
+Restart after failure
+Run in background
+Recover after network interruption
+Recover after API outage
+Recover after Windows restart
+```
+
+Network failure must NOT crash the service.
+
+Use exponential backoff.
+
+Example:
+
+```text
+5 sec
+10 sec
+30 sec
+60 sec
+maximum 5 min
+```
+
+Heartbeat should return to normal interval after connection is restored.
+
+---
+
+# 35. AGENT COLLECTOR ARCHITECTURE
+
+Do not write one giant Worker.cs file.
+
+Create modular collectors.
+
+Suggested structure:
+
+```text
+Collectors/
+    CpuCollector.cs
+    MemoryCollector.cs
+    DiskCollector.cs
+    NetworkCollector.cs
+    OsCollector.cs
+    HardwareCollector.cs
+    UserCollector.cs
+```
+
+Services:
+
+```text
+EnrollmentService
+HeartbeatService
+InventoryService
+MetricsService
+ApiClient
+IdentityService
+SecureStorageService
+```
+
+Models:
+
+```text
+EnrollmentRequest
+EnrollmentResponse
+HeartbeatPayload
+InventoryPayload
+MetricPayload
+```
+
+---
+
+# 36. ERROR HANDLING
+
+Agent must tolerate:
+
+```text
+No internet
+DNS failure
+API timeout
+HTTP 500
+Invalid response
+Temporary database outage
+Windows collector failure
+```
+
+One failed collector must not necessarily kill the entire telemetry cycle.
+
+Log structured errors.
+
+Never crash-loop unnecessarily.
+
+---
+
+# 37. API VERSIONING
+
+All API endpoints must use:
+
+```text
+/api/v1/
+```
+
+Examples:
+
+```text
+POST /api/v1/agents/enroll
+POST /api/v1/agents/heartbeat
+POST /api/v1/agents/inventory
+POST /api/v1/agents/metrics
+
+POST /api/v1/auth/login
+GET  /api/v1/auth/me
+
+GET /api/v1/devices
+GET /api/v1/devices/{id}
+GET /api/v1/devices/{id}/metrics
+GET /api/v1/devices/{id}/activity
+```
+
+Use OpenAPI documentation generated by FastAPI.
+
+---
+
+# 38. HEALTH ENDPOINTS
+
+Create:
+
+```http
+GET /health
+```
+
+Returns basic process status.
+
+Also:
+
+```http
+GET /ready
+```
+
+Checks:
+
+```text
+Database connectivity
+Application readiness
+```
+
+Avoid exposing secrets or internal environment details.
+
+---
+
+# 39. DOCKER
+
+Create Dockerfiles for:
+
+```text
+backend
+frontend
+```
+
+Create:
+
+```text
+docker-compose.yml
+```
+
+for local development.
+
+Services:
+
+```text
+frontend
+backend
+postgres
+```
+
+Do NOT require Replit services to run locally.
+
+Example:
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+must work after configuration.
+
+---
+
+# 40. DATABASE MIGRATIONS
+
+Create initial Alembic migration.
+
+Database initialization must be deterministic.
+
+Do not populate fake production data automatically.
+
+Development seed data may exist as an explicit command.
+
+---
+
+# 41. TESTING
+
+Backend tests must cover at minimum:
+
+```text
+Enrollment
+Invalid enrollment
+Heartbeat authentication
+Device identity
+Duplicate enrollment
+Inventory updates
+Metrics ingestion
+Online status calculation
+Offline status calculation
+Token expiration
+```
+
+Agent unit tests should cover:
+
+```text
+Identity persistence
+Backoff
+Metric calculations
+Disk percentage calculations
+Payload serialization
+```
+
+Do not rely only on manual testing.
+
+---
+
+# 42. LOGGING
+
+Use structured logging.
+
+Backend log concepts:
+
+```text
+timestamp
+level
+request_id
+event
+device_id
+agent_id
+```
+
+Agent log concepts:
+
+```text
+timestamp
+level
+component
+event
+message
+```
+
+Never log:
+
+```text
+passwords
+agent tokens
+enrollment tokens
+JWT secrets
+database passwords
+```
+
+---
+
+# 43. TIME
+
+All backend timestamps must be stored as:
+
+```text
+UTC
+```
+
+Frontend may display them in local timezone.
+
+Do not store local server timestamps as authoritative event times.
+
+---
+
+# 44. API ERROR FORMAT
+
+Create a consistent error contract.
+
+Example:
+
+```json
+{
+  "error": {
+    "code": "INVALID_ENROLLMENT_TOKEN",
+    "message": "The enrollment token is invalid or expired.",
+    "request_id": "..."
+  }
+}
+```
+
+Do not expose Python stack traces in production responses.
+
+---
+
+# 45. PERFORMANCE
+
+Agent V1 must remain lightweight.
+
+Target idle resource usage:
+
+```text
+CPU: effectively negligible while idle
+RAM: reasonable for .NET worker
+Network: minimal
+Disk writes: limited
+```
+
+Do not poll expensive Windows APIs every few seconds unnecessarily.
+
+Separate:
+
+```text
+Heartbeat
+Metrics
+Inventory
+```
+
+Recommended intervals:
+
+```text
+Heartbeat:
+30 sec
+
+Metrics:
+30–60 sec
+
+Inventory:
+On startup
++
+Every 6 hours
++
+Manual refresh later
+```
+
+---
+
+# 46. DO NOT IMPLEMENT YET
+
+Explicitly exclude these features from Agent V1:
+
+```text
+Remote shell
+PowerShell execution
+CMD execution
+File transfer
+Software installation
+Software removal
+Windows patching
+Process kill
+Service restart
+Remote desktop
+Screen capture
+Browser history
+Key logging
+User surveillance
+Network packet capture
+Registry modification
+AI diagnostics
+Ticketing
+SNMP
+MikroTik
+Active Directory writes
+```
+
+Prepare architectural extension points only.
+
+Do not create fake buttons pretending these functions work.
+
+---
+
+# 47. FUTURE COMMAND ENGINE PREPARATION
+
+Although remote commands are excluded, design the database to allow a future model similar to:
+
+```text
+commands
+command_results
+```
+
+Conceptually:
+
+```text
+QUEUED
+DELIVERED
+RUNNING
+SUCCEEDED
+FAILED
+EXPIRED
+CANCELLED
+```
+
+Do NOT activate execution capability yet.
+
+---
+
+# 48. FUTURE MULTI-TENANCY
+
+Do not implement full SaaS multi-tenancy now.
+
+However, architecture must not make future tenancy impossible.
+
+Create an organization concept if appropriate:
+
+```text
+organizations
+```
+
+Each:
+
+```text
+device
+user
+enrollment token
+```
+
+can belong to an organization.
+
+For initial deployment create one default organization.
+
+Do not over-engineer billing or subscriptions.
+
+---
+
+# 49. DOMAIN MODEL RULE
+
+Use:
+
+```text
+Organization
+    ↓
+Device
+    ↓
+Agent
+```
+
+Device represents the endpoint.
+
+Agent represents the installed Nexora software instance.
+
+This distinction will help later when reinstalling or upgrading agents.
+
+---
+
+# 50. UI BRANDING
+
+Product:
+
+# Nexora
+
+Subtitle:
+
+```text
+IT Operations Platform
+```
+
+Do not include:
+
+```text
+Design Print
+Atera Clone
+Atera
+RMM Clone
+```
+
+in visible branding.
+
+Use professional neutral branding.
+
+Logo can initially be a simple text-based Nexora mark.
+
+Do not spend excessive effort creating branding.
+
+Functionality first.
+
+---
+
+# 51. README
+
+Create a comprehensive README containing:
+
+```text
+Project overview
+Architecture
+Repository structure
+Requirements
+Environment variables
+Local setup
+Docker setup
+Database migration
+Frontend startup
+Backend startup
+Agent build
+Agent configuration
+Testing
+Deployment concepts
+Security notes
+```
+
+Someone unfamiliar with Replit must be able to clone and run the project.
+
+---
+
+# 52. DOCUMENTATION
+
+Create:
+
+## docs/architecture.md
+
+Explain:
+
+```text
+Frontend
+Backend
+Database
+Agent
+Data flow
+Trust boundaries
+```
+
+## docs/agent-protocol.md
+
+Document:
+
+```text
+Enrollment
+Authentication
+Heartbeat
+Inventory
+Metrics
+Errors
+Versioning
+```
+
+## docs/security-model.md
+
+Explain:
+
+```text
+Credentials
+Enrollment tokens
+Agent authentication
+User authentication
+Secret storage
+Transport security
+Threat assumptions
+```
+
+## docs/deployment.md
+
+Explain how the application can later run on:
+
+```text
+Generic Docker host
+AWS
+Azure
+```
+
+Do not tightly couple instructions to any one cloud provider.
+
+---
+
+# 53. DEVELOPMENT APPROACH
+
+Do not attempt to build everything in one uncontrolled pass.
+
+Implement in this order:
+
+## Phase 1
+
+Repository and infrastructure foundation.
+
+## Phase 2
+
+Database and backend API.
+
+## Phase 3
+
+Admin authentication.
+
+## Phase 4
+
+Agent enrollment.
+
+## Phase 5
+
+Windows Agent identity and Windows Service.
+
+## Phase 6
+
+Heartbeat.
+
+## Phase 7
+
+Inventory.
+
+## Phase 8
+
+Metrics.
+
+## Phase 9
+
+Devices dashboard.
+
+## Phase 10
+
+Device details.
+
+## Phase 11
+
+Online/offline detection.
+
+## Phase 12
+
+Testing and hardening.
+
+After every phase:
+
+```text
+Build
+Run
+Test
+Fix
+Commit-ready state
+```
+
+Do not continue while the current phase is broken.
+
+---
+
+# 54. CODE QUALITY
+
+Use:
+
+```text
+Strong typing
+Clear naming
+Small functions
+Dependency injection
+Separation of concerns
+Reusable services
+Clean API contracts
+```
+
+Avoid:
+
+```text
+God classes
+Huge route files
+Duplicated code
+Magic constants
+Hard-coded URLs
+Hard-coded secrets
+Silent exceptions
+```
+
+Add comments only where they explain architectural reasoning.
+
+Do not litter code with obvious comments.
+
+---
+
+# 55. SECURITY-FIRST RULE
+
+This system will eventually control endpoint computers.
+
+Therefore every architectural decision should assume the future platform will become security-sensitive.
+
+Never sacrifice authentication or auditability merely to make development easier.
+
+No development shortcut should create an insecure default that is difficult to remove later.
+
+---
+
+# 56. INITIAL DEFAULT CONFIGURATION
+
+Use configuration values similar to:
+
+```text
+Agent Version:
+0.1.0
+
+Heartbeat:
+30 seconds
+
+Metrics:
+30 seconds
+
+Inventory:
+6 hours
+
+Online Threshold:
+90 seconds
+
+Offline Threshold:
+120 seconds
+
+API Version:
+v1
+```
+
+These values must be configurable.
+
+---
+
+# 57. AGENT INSTALLATION
+
+For V1, first make the agent runnable manually for development.
+
+Then ensure it can be installed as a Windows Service.
+
+Provide documented commands for:
+
+```text
+Build
+Publish
+Install service
+Start service
+Stop service
+Remove service
+```
+
+Later we will create MSI/EXE packaging.
+
+Do not spend this milestone building an advanced installer.
+
+---
+
+# 58. DEVELOPMENT MODE
+
+Provide a safe development mode.
+
+For example:
+
+```env
+APP_ENV=development
+```
+
+Development mode may:
+
+```text
+Enable detailed logs
+Allow local HTTP
+Enable Swagger
+```
+
+Production mode must enforce safer defaults.
+
+Do NOT automatically disable authentication in development mode.
+
+---
+
+# 59. DATA FLOW
+
+The target V1 data flow is:
+
+```text
+Windows Machine
+       │
+       ▼
+Nexora Agent
+       │
+       │ HTTPS REST API
+       ▼
+Nexora Backend
+       │
+       ▼
+PostgreSQL
+       │
+       ▼
+Nexora Web Dashboard
+```
+
+No direct frontend-to-agent connection.
+
+All agent communication must pass through backend APIs.
+
+---
+
+# 60. ACCEPTANCE TEST
+
+The milestone is complete only after this scenario succeeds.
+
+Create an enrollment token.
+
+Install/run Nexora Agent on a Windows machine.
+
+The agent:
+
+```text
+creates persistent identity
+enrolls
+receives credentials
+sends inventory
+sends heartbeat
+sends metrics
+```
+
+Dashboard displays:
+
+```text
+Hostname
+Online
+Current user
+Domain
+Windows edition
+IP
+CPU
+RAM
+Disk
+Uptime
+Agent version
+Last seen
+```
+
+Stop the Windows Service.
+
+After the configured timeout:
+
+```text
+Device = OFFLINE
+```
+
+Restart the service.
+
+Within approximately one heartbeat cycle:
+
+```text
+Device = ONLINE
+```
+
+The same device must not be duplicated.
+
+Restart the computer.
+
+The device must reconnect using its existing identity.
+
+It must NOT enroll as a new device.
+
+---
+
+# 61. INITIAL EXAMPLE
+
+Example endpoint:
+
+```text
+Hostname:
+SALMA-PC
+
+User:
+salma
+
+Domain:
+design.local
+
+Operating System:
+Windows 11 Pro
+
+IPv4:
+192.168.10.73
+
+CPU:
+17%
+
+RAM:
+62%
+
+Disk C:
+71%
+
+Agent:
+0.1.0
+```
+
+Dashboard:
+
+```text
+SALMA-PC                 ● ONLINE
+
+User
+salma
+
+Domain
+design.local
+
+OS
+Windows 11 Pro
+
+IP
+192.168.10.73
+
+CPU
+17%
+
+RAM
+62%
+
+Disk
+71%
+
+Agent
+0.1.0
+
+Last Seen
+12 seconds ago
+```
+
+This is only example data.
+
+Do not hard-code it.
+
+---
+
+# 62. DELIVERABLES
+
+At the end of this milestone I expect:
+
+```text
+Working frontend
+Working FastAPI backend
+Working PostgreSQL database
+Working Alembic migrations
+Working admin login
+Working enrollment system
+Working .NET Windows Agent
+Working heartbeat
+Working inventory
+Working metrics
+Working device list
+Working device details page
+Working online/offline detection
+Docker configuration
+Environment template
+Backend tests
+Agent tests
+Architecture documentation
+Security documentation
+Deployment documentation
+README
+```
+
+---
+
+# 63. FINAL ENGINEERING REVIEW
+
+Before declaring the milestone complete, perform a self-review.
+
+Check:
+
+```text
+Security
+Authentication
+Secret handling
+Database integrity
+Device duplication
+Retry behavior
+Agent persistence
+Windows restart behavior
+API validation
+Frontend error states
+Docker portability
+Migration integrity
+Logging
+Tests
+Documentation
+```
+
+Fix discovered issues before completion.
+
+---
+
+# 64. IMPORTANT OPERATING INSTRUCTION
+
+You are authorized to create and modify all files required for this project.
+
+Do not stop after generating mockups or architecture diagrams.
+
+Build the working application.
+
+Whenever you encounter an implementation problem:
+
+1. Inspect the error.
+2. Identify the root cause.
+3. Fix it.
+4. Re-run the relevant build/test.
+5. Verify the result.
+
+Do not hide failures.
+
+Do not replace failed functionality with mocked behavior simply to make the UI look complete.
+
+If something cannot be implemented in the Replit environment, implement everything that can be implemented, document the exact limitation, and keep the code portable so the missing component can be built externally.
+
+The Windows Agent source code MUST still be created even if Windows Service execution cannot be tested inside Replit's Linux environment.
+
+---
+
+# 65. SOURCE CONTROL READINESS
+
+Keep the repository ready for Git source control.
+
+Never commit:
+
+```text
+.env
+database passwords
+JWT secrets
+agent credentials
+enrollment tokens
+private keys
+generated logs
+build outputs
+```
+
+Include an appropriate:
+
+```text
+.gitignore
+```
+
+GitHub will later become the source of truth.
+
+Replit must remain replaceable.
+
+---
+
+# 66. FUTURE CLOUD MIGRATION
+
+Assume that after development the repository may be deployed to either:
+
+```text
+AWS
+```
+
+or:
+
+```text
+Microsoft Azure
+```
+
+The source code must remain unchanged where possible.
+
+Cloud-specific settings must remain infrastructure configuration only.
+
+The Windows Agent should communicate through a configurable DNS endpoint such as:
+
+```text
+https://api.nexora.example
+```
+
+Therefore moving the backend from Replit to AWS/Azure should require primarily:
+
+```text
+DNS change
+Environment variables
+Database migration
+Container deployment
+```
+
+and NOT Agent reinstallation or application redesign.
+
+---
+
+# 67. START NOW
+
+Begin implementation with:
+
+# Phase 1 — Platform Foundation
+
+Then continue sequentially until the complete Agent V1 acceptance criteria are satisfied.
+
+Do not expand scope beyond this specification.
+
+Prioritize:
+
+# Reliability → Security → Correctness → Maintainability → UX → Additional Features

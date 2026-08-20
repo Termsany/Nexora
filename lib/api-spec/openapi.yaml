@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: dashboard
+    description: Operational overview
+  - name: devices
+    description: Enrolled endpoint devices
+  - name: agents
+    description: Agent enrollment and telemetry
 paths:
   /healthz:
     get:
@@ -24,7 +30,186 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /v1/dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary
+      responses:
+        "200":
+          description: Current device health summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /v1/dashboard/activity:
+    get:
+      operationId: getDashboardActivity
+      tags: [dashboard]
+      summary: Get recent device activity
+      responses:
+        "200":
+          description: Recent activity events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEvent"
+  /v1/devices:
+    get:
+      operationId: listDevices
+      tags: [devices]
+      summary: List enrolled devices
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ONLINE, OFFLINE, UNKNOWN]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Paginated devices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceList"
+  /v1/devices/{device_id}:
+    get:
+      operationId: getDevice
+      tags: [devices]
+      summary: Get device details
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          description: Device details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceDetails"
+        "404":
+          description: Device not found
+  /v1/devices/{device_id}/metrics:
+    get:
+      operationId: getDeviceMetrics
+      tags: [devices]
+      summary: Get stored device metrics
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          description: Metric history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Metric"
+  /v1/agents/enroll:
+    post:
+      operationId: enrollAgent
+      tags: [agents]
+      summary: Enroll an agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentInput"
+      responses:
+        "201":
+          description: Enrolled agent credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "400":
+          description: Invalid enrollment
+  /v1/agents/heartbeat:
+    post:
+      operationId: postHeartbeat
+      tags: [agents]
+      summary: Receive an authenticated heartbeat
+      security:
+        - agentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeartbeatInput"
+      responses:
+        "204":
+          description: Heartbeat accepted
+        "401":
+          description: Invalid agent credentials
+  /v1/agents/inventory:
+    post:
+      operationId: postInventory
+      tags: [agents]
+      summary: Receive endpoint inventory
+      security:
+        - agentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InventoryInput"
+      responses:
+        "204":
+          description: Inventory accepted
+        "401":
+          description: Invalid agent credentials
+  /v1/agents/metrics:
+    post:
+      operationId: postMetrics
+      tags: [agents]
+      summary: Receive endpoint metrics
+      security:
+        - agentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetricsInput"
+      responses:
+        "204":
+          description: Metrics accepted
+        "401":
+          description: Invalid agent credentials
 components:
+  parameters:
+    DeviceId:
+      name: device_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  securitySchemes:
+    agentBearer:
+      type: http
+      scheme: bearer
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +218,164 @@ components:
           type: string
       required:
         - status
+    DashboardSummary:
+      type: object
+      required: [total_devices, online_devices, offline_devices, unknown_devices, average_cpu, average_ram, disks_over_threshold]
+      properties:
+        total_devices: { type: integer }
+        online_devices: { type: integer }
+        offline_devices: { type: integer }
+        unknown_devices: { type: integer }
+        average_cpu: { type: number }
+        average_ram: { type: number }
+        disks_over_threshold: { type: integer }
+    ActivityEvent:
+      type: object
+      required: [id, device_id, hostname, event, timestamp]
+      properties:
+        id: { type: string }
+        device_id: { type: string, format: uuid }
+        hostname: { type: string }
+        event: { type: string }
+        timestamp: { type: string, format: date-time }
+    Device:
+      type: object
+      required: [id, agent_id, device_uuid, hostname, status, first_seen_at, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        agent_id: { type: string }
+        device_uuid: { type: string, format: uuid }
+        hostname: { type: string }
+        status: { type: string, enum: [ONLINE, OFFLINE, UNKNOWN] }
+        current_user: { type: ["string", "null"] }
+        domain: { type: ["string", "null"] }
+        os_name: { type: ["string", "null"] }
+        os_version: { type: ["string", "null"] }
+        os_build: { type: ["string", "null"] }
+        architecture: { type: ["string", "null"] }
+        ip_address: { type: ["string", "null"] }
+        agent_version: { type: ["string", "null"] }
+        cpu_percent: { type: ["number", "null"] }
+        ram_percent: { type: ["number", "null"] }
+        disk_percent: { type: ["number", "null"] }
+        uptime_seconds: { type: ["integer", "null"] }
+        last_seen_at: { type: ["string", "null"], format: date-time }
+        first_seen_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    DeviceList:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Device" } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    DeviceDetails:
+      allOf:
+        - $ref: "#/components/schemas/Device"
+        - type: object
+          required: [hardware, disks, network]
+          properties:
+            hardware:
+              $ref: "#/components/schemas/Hardware"
+            disks:
+              type: array
+              items:
+                $ref: "#/components/schemas/Disk"
+            network:
+              type: array
+              items:
+                $ref: "#/components/schemas/NetworkInterface"
+    Hardware:
+      type: object
+      properties:
+        manufacturer: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        cpu_model: { type: ["string", "null"] }
+        logical_processors: { type: ["integer", "null"] }
+        total_ram_bytes: { type: ["integer", "null"] }
+        bios_version: { type: ["string", "null"] }
+    Disk:
+      type: object
+      required: [drive, filesystem, total_bytes, used_bytes, free_bytes, used_percent]
+      properties:
+        drive: { type: string }
+        filesystem: { type: string }
+        total_bytes: { type: integer }
+        used_bytes: { type: integer }
+        free_bytes: { type: integer }
+        used_percent: { type: number }
+    NetworkInterface:
+      type: object
+      required: [name, ipv4, mac, gateway, dns_servers, interface_type]
+      properties:
+        name: { type: string }
+        ipv4: { type: string }
+        mac: { type: string }
+        gateway: { type: string }
+        dns_servers: { type: array, items: { type: string } }
+        interface_type: { type: string }
+    Metric:
+      type: object
+      required: [captured_at, received_at, cpu_percent, ram_percent, ram_used_bytes, ram_available_bytes, disk_percent, uptime_seconds]
+      properties:
+        captured_at: { type: string, format: date-time }
+        received_at: { type: string, format: date-time }
+        cpu_percent: { type: number }
+        ram_percent: { type: number }
+        ram_used_bytes: { type: integer }
+        ram_available_bytes: { type: integer }
+        disk_percent: { type: number }
+        uptime_seconds: { type: integer }
+    EnrollmentInput:
+      type: object
+      required: [enrollment_token, device_uuid, hostname, machine_guid_hash, agent_version]
+      properties:
+        enrollment_token: { type: string, minLength: 1 }
+        device_uuid: { type: string, format: uuid }
+        hostname: { type: string, minLength: 1 }
+        machine_guid_hash: { type: string, minLength: 1 }
+        agent_version: { type: string, minLength: 1 }
+    EnrollmentResponse:
+      type: object
+      required: [agent_id, device_id, agent_token, api_base_url, heartbeat_interval_seconds]
+      properties:
+        agent_id: { type: string }
+        device_id: { type: string, format: uuid }
+        agent_token: { type: string }
+        api_base_url: { type: string }
+        heartbeat_interval_seconds: { type: integer }
+    HeartbeatInput:
+      type: object
+      required: [agent_version, uptime_seconds]
+      properties:
+        agent_version: { type: string }
+        timestamp_utc: { type: string, format: date-time }
+        uptime_seconds: { type: integer, minimum: 0 }
+        logged_in_user: { type: ["string", "null"] }
+    InventoryInput:
+      type: object
+      required: [hostname, device_uuid, agent_version, os, hardware, disks, network]
+      properties:
+        hostname: { type: string }
+        device_uuid: { type: string, format: uuid }
+        agent_version: { type: string }
+        current_user: { type: ["string", "null"] }
+        domain: { type: ["string", "null"] }
+        os: { type: object, additionalProperties: true }
+        hardware: { type: object, additionalProperties: true }
+        disks: { type: array, items: { type: object, additionalProperties: true } }
+        network: { type: array, items: { type: object, additionalProperties: true } }
+    MetricsInput:
+      type: object
+      required: [captured_at, cpu_percent, ram_percent, ram_used_bytes, ram_available_bytes, disk_percent, uptime_seconds]
+      properties:
+        captured_at: { type: string, format: date-time }
+        cpu_percent: { type: number, minimum: 0, maximum: 100 }
+        ram_percent: { type: number, minimum: 0, maximum: 100 }
+        ram_used_bytes: { type: integer, minimum: 0 }
+        ram_available_bytes: { type: integer, minimum: 0 }
+        disk_percent: { type: number, minimum: 0, maximum: 100 }
+        uptime_seconds: { type: integer, minimum: 0 }
 
