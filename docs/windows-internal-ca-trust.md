@@ -51,6 +51,41 @@ machine should show a normal, valid padlock with no certificate warning, and
 the Nexora Agent (once installed) will be able to complete its normal .NET
 TLS handshake against the API without any code-level certificate bypass.
 
+## Bootstrap limitation: downloading the package itself
+
+The Windows Agent pilot package (`nexora-agent-pilot.zip`, which contains
+`nexora-root-ca.crt` among other files) is served from
+`https://nexora.design.local/downloads/nexora-agent-pilot.zip` — over the
+same HTTPS endpoint the Root CA is meant to protect. A brand-new Windows
+machine that does not yet trust the Nexora Root CA will see a browser
+certificate warning when it first visits Nexora to download that ZIP,
+**before** it has a way to obtain the Root CA through Nexora itself. This is
+an inherent chicken-and-egg problem with any self-hosted internal CA and is
+not solved by weakening TLS.
+
+Supported ways to bootstrap the first Pilot machine(s):
+
+1. **Manual trusted transfer** (used for this Pilot): copy
+   `pilot/certificates/nexora-root-ca.crt` directly from the Nexora server
+   to the Windows pilot machine (USB drive, SFTP, or an admin file share)
+   *before* visiting the download page, then `Import-Certificate` it as
+   above. Once trusted, the same machine can browse to Nexora and download
+   the full package without any warning.
+2. **Active Directory Group Policy** (preferred for anything beyond a
+   single pilot machine): pre-distribute the Root CA to all domain
+   computers via GPO (see below) before anyone needs to download the Agent
+   package — trust is then already established by the time IT visits
+   Nexora.
+3. **Existing corporate software distribution** (SCCM, Intune, etc.): push
+   `nexora-root-ca.crt` through existing enterprise tooling ahead of time,
+   the same way any other internal root certificate would be distributed.
+4. **USB/admin transfer for the very first Pilot machine**: functionally
+   the same as (1) — an administrator with direct access to the Nexora
+   server carries the public certificate to the target machine.
+
+None of these require, and none of them permit, disabling certificate
+validation in a browser or in the Agent.
+
 ## Later: enterprise-wide deployment via Group Policy
 
 This is **not** performed as part of this task — documented here for the

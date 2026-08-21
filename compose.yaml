@@ -67,6 +67,7 @@ services:
       - "${NEXORA_HTTPS_PORT:-443}:443"
     volumes:
       - /etc/nexora/pki/server:/etc/nexora/pki/server:ro
+      - ./pilot/downloads:/usr/share/nginx/downloads:ro
     depends_on:
       api:
         condition: service_healthy

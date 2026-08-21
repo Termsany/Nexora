@@ -1,9 +1,16 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
-import { Check, Copy, KeyRound, LockKeyhole, RefreshCw, ShieldCheck } from 'lucide-react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Check, Copy, Download, KeyRound, LockKeyhole, RefreshCw, ShieldCheck } from 'lucide-react';
 import { AppShell, PageIntro } from '@/components/app-shell';
 import { InlineNotice, Panel, PanelHeading } from '@/components/console-ui';
 
 type TokenRecord = { id: string; name: string; organization: string; expires_at: string; max_uses: number; current_uses: number; created_at: string; revoked_at: string | null; active: boolean; token?: string };
+
+type AgentManifest = { product: string; version: string; architecture: string; package: string; packageSha256: string; agentSha256: string; packageSizeBytes: number; publishedAt: string };
+
+function formatBytes(bytes: number) {
+  const mb = bytes / (1024 * 1024);
+  return `${mb.toFixed(1)} MB`;
+}
 
 export default function Administration() {
   const [adminToken, setAdminToken] = useState('');
@@ -13,6 +20,15 @@ export default function Administration() {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [manifest, setManifest] = useState<AgentManifest | null>(null);
+  const [manifestError, setManifestError] = useState(false);
+
+  useEffect(() => {
+    fetch('/downloads/agent-manifest.json')
+      .then((response) => { if (!response.ok) throw new Error(); return response.json(); })
+      .then((data: AgentManifest) => setManifest(data))
+      .catch(() => setManifestError(true));
+  }, []);
 
   const request = async (path = '', init?: RequestInit) => {
     const response = await fetch(`/api/v1/admin/enrollment-tokens${path}`, { ...init, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}`, ...init?.headers } });
@@ -40,6 +56,33 @@ export default function Administration() {
       </Panel>
       <Panel><PanelHeading eyebrow="Credentials" title="Enrollment tokens" meta="Raw token values cannot be retrieved." action={<button type="button" onClick={() => void load()} disabled={!adminToken || busy} className="rounded-md border p-2 text-muted-foreground disabled:opacity-40" aria-label="Refresh enrollment tokens"><RefreshCw size={15} className={busy ? 'animate-spin' : ''} /></button>} />
         {tokens.length === 0 ? <div className="p-8 text-center text-[11px] text-muted-foreground">Enter the administrative token and refresh to load credentials.</div> : <div className="divide-y divide-border">{tokens.map((token) => <div key={token.id} className="flex items-center gap-4 px-5 py-4"><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-semibold text-primary">{token.name}</p><p className="mt-1 text-[10px] text-muted-foreground">{token.organization} · {token.current_uses}/{token.max_uses} uses · expires {new Date(token.expires_at).toLocaleString()}</p></div><span className={`text-[10px] font-bold ${token.active && !token.revoked_at ? 'text-[#14704f]' : 'text-destructive'}`}>{token.active && !token.revoked_at ? 'ACTIVE' : 'REVOKED'}</span>{token.active && !token.revoked_at && <button type="button" onClick={() => void revoke(token.id)} className="text-[10px] font-bold text-destructive hover:underline">Revoke</button>}</div>)}</div>}
+      </Panel>
+    </div>
+    <div className="mt-5">
+      <Panel>
+        <PanelHeading eyebrow="Distribution" title="Agent Downloads" meta="Internal Pilot network only. Windows Agent installers are not authenticated downloads." action={<Download size={17} className="text-muted-foreground" />} />
+        <div className="p-5">
+          {manifestError && <InlineNotice tone="red">Could not load the Agent package manifest. Run the packaging script on the server, then reload.</InlineNotice>}
+          {!manifest && !manifestError && <div className="text-[11px] text-muted-foreground">Loading Agent package details…</div>}
+          {manifest && (
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-primary">Windows Agent</p>
+                <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-[11px] sm:grid-cols-4">
+                  <div><dt className="text-muted-foreground">Version</dt><dd className="font-mono-data text-primary">{manifest.version}</dd></div>
+                  <div><dt className="text-muted-foreground">Architecture</dt><dd className="font-mono-data text-primary">Windows x64</dd></div>
+                  <div><dt className="text-muted-foreground">Package</dt><dd className="font-mono-data text-primary">{manifest.package}</dd></div>
+                  <div><dt className="text-muted-foreground">Size</dt><dd className="font-mono-data text-primary">{formatBytes(manifest.packageSizeBytes)}</dd></div>
+                </dl>
+                <p className="mt-3 truncate text-[10px] text-muted-foreground">SHA-256 (package): <span className="font-mono-data text-primary">{manifest.packageSha256}</span></p>
+                <p className="mt-1 truncate text-[10px] text-muted-foreground">SHA-256 (nexora-agent.exe): <span className="font-mono-data text-primary">{manifest.agentSha256}</span></p>
+              </div>
+              <a href="/downloads/nexora-agent-pilot.zip" download className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-primary px-4 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-[#2e4f68]" data-testid="button-download-agent">
+                Download Windows Agent <Download size={14} />
+              </a>
+            </div>
+          )}
+        </div>
       </Panel>
     </div>
     <div className="mt-5"><Panel><div className="flex items-center gap-3 p-5 text-[11px] text-muted-foreground"><LockKeyhole size={15} /> Agent credentials are generated independently during enrollment and cannot be retrieved here.</div></Panel></div>

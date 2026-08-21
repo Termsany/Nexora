@@ -59,3 +59,31 @@ server/nexora.design.local.key  — server private key (secret)
   read access (`chmod 600`); any backup mechanism must preserve this or
   store them in an equivalently access-controlled location (encrypted
   backup target, secrets manager, etc.), not a general-purpose file share.
+
+## Windows Agent package distribution
+
+The Agent pilot package is served as a static, unauthenticated HTTPS
+download at `/downloads/nexora-agent-pilot.zip` (built by
+`scripts/build-windows-agent-package.sh`, host directory
+`pilot/downloads/`, bind-mounted read-only into `web` — never baked into
+the image, so a new Agent build can be published without rebuilding the
+web image).
+
+**This is acceptable for the current internal Pilot only**, on the
+assumption that Nexora is reachable exclusively from the trusted internal
+network (no port-forwarding, no public exposure of `443`/`80`). The
+package contains no secrets (see `docs/windows-internal-ca-trust.md` for
+what is and isn't included), but an unauthenticated download endpoint is
+not an acceptable long-term distribution model once Nexora is reachable
+from outside a fully trusted network, or once there are multiple Agent
+versions/environments to manage.
+
+For production, replace this with one of:
+
+- an authenticated download gated behind the Administration session/token,
+- a short-lived signed download URL generated per request,
+- a dedicated release-artifact service, or
+- object storage (S3/Azure Blob) with access-controlled, time-limited URLs.
+
+None of that is implemented yet — this is a deliberately deferred decision,
+not an oversight.
