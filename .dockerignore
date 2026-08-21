@@ -1,0 +1,12 @@
+.git
+.agents
+.codex
+.local
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.env
+.env.*
+!.env.example
+npm-debug.log*
+pnpm-debug.log*
