@@ -49,3 +49,11 @@ Thumbs.db
 .local/
 .env
 node_modules/
+
+# Deployment-time build/publish artifacts (not source) - keep pilot/certificates/ tracked
+/publish/
+/pilot/windows-agent/
+
+# PKI material must never enter git - CA/server keys live at /etc/nexora/pki/ on the host
+*.key
+*.pem

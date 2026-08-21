@@ -33,8 +33,11 @@ Build and launch the dashboard, API, and PostgreSQL database:
 docker compose up --build
 ```
 
-Open `http://localhost:8080`. The database schema is applied automatically on
-startup via versioned Drizzle migrations (`lib/db/drizzle/*.sql`, run with
+The `web` container terminates TLS and listens on `80` (HTTP → HTTPS
+redirect) and `443`. Open `https://nexora.design.local` (or
+`http://localhost` during local development without a certificate — see
+below). The database schema is applied automatically on startup via
+versioned Drizzle migrations (`lib/db/drizzle/*.sql`, run with
 `drizzle-kit migrate`) — deterministic, ordered, and safe to re-run since
 each migration is tracked in `drizzle.__drizzle_migrations`. `drizzle-kit
 push` remains available for fast local schema iteration only (see Quickstart
@@ -42,12 +45,17 @@ above); it is never used by the `migrate` container or any deployment path.
 When you change `lib/db/src/schema`, run
 `pnpm --filter @workspace/db run generate` to add a new versioned migration
 file, commit it, then apply it locally with
-`pnpm --filter @workspace/db run migrate`. To use another host port, set
-`NEXORA_PORT`, for example:
+`pnpm --filter @workspace/db run migrate`. To use different host ports, set
+`NEXORA_HTTP_PORT` / `NEXORA_HTTPS_PORT`, for example:
 
 ```bash
-NEXORA_PORT=9090 docker compose up --build
+NEXORA_HTTP_PORT=8080 NEXORA_HTTPS_PORT=8443 docker compose up --build
 ```
+
+TLS certificate and key are read from `/etc/nexora/pki/server/` on the host
+(bind-mounted read-only into `web`); see `docs/deployment.md` for how this
+is provisioned and backed up, and `docs/windows-internal-ca-trust.md` for
+how Windows clients trust the internal CA that issued it.
 
 For a non-local deployment, override `POSTGRES_PASSWORD`, `JWT_SECRET`,
 `ENROLLMENT_SECRET`, `ADMIN_API_TOKEN`, `API_BASE_URL`, and
@@ -58,7 +66,8 @@ For a non-local deployment, override `POSTGRES_PASSWORD`, `JWT_SECRET`,
 Create an enrollment token from Administration or through the API:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/admin/enrollment-tokens \
+curl --cacert /etc/nexora/pki/ca/nexora-root-ca.crt \
+  -X POST https://nexora.design.local/api/v1/admin/enrollment-tokens \
   -H "Authorization: Bearer $ADMIN_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"First Windows PC","organization":"Default","expires_at":"2030-01-01T00:00:00Z","max_uses":1}'
@@ -75,7 +84,7 @@ Install it from an elevated PowerShell session:
 
 ```powershell
 .\scripts\windows\install-agent.ps1 `
-  -ApiBaseUrl "https://nexora.example/api/" `
+  -ApiBaseUrl "https://nexora.design.local/api" `
   -EnrollmentToken "<token>" `
   -SourcePath ".\agent\Nexora.Agent\bin\Release\net8.0-windows\win-x64\publish"
 ```
