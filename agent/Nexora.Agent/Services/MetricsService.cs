@@ -15,8 +15,9 @@ public sealed class MetricsService(NexoraApiClient api, AgentOptions options, Cp
             try
             {
                 var memorySnapshot = memory.Collect();
-                var diskPercent = disks.Collect().Select(disk => disk.UsedPercent).DefaultIfEmpty(0).Max();
-                var payload = new MetricsPayload(DateTimeOffset.UtcNow, cpu.Collect(), memorySnapshot.UsedPercent, memorySnapshot.UsedBytes, memorySnapshot.AvailableBytes, diskPercent, user.UptimeSeconds);
+                var diskSnapshots = disks.Collect();
+                var diskPercent = diskSnapshots.Select(disk => disk.UsedPercent).DefaultIfEmpty(0).Max();
+                var payload = new MetricsPayload(DateTimeOffset.UtcNow, cpu.Collect(), memorySnapshot.UsedPercent, memorySnapshot.UsedBytes, memorySnapshot.AvailableBytes, diskPercent, user.UptimeSeconds, diskSnapshots);
                 await api.SendMetricsAsync(token, payload, cancellationToken);
                 logger.LogDebug("MetricsSucceeded");
                 attempt = 0;

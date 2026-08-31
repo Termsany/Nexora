@@ -29,6 +29,15 @@ export interface Device {
   ip_address?: string | null;
   /** @nullable */
   agent_version?: string | null;
+  organization_id: string;
+  /** @nullable */
+  organization_name?: string | null;
+  /** @nullable */
+  organization_slug?: string | null;
+  /** @nullable */
+  site_id?: string | null;
+  /** @nullable */
+  site_name?: string | null;
   /** @nullable */
   cpu_percent?: number | null;
   /** @nullable */

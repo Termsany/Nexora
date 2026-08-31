@@ -18,6 +18,401 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary Sign in and receive a session cookie
+ */
+
+
+
+export const LoginBody = zod.object({
+  "email": zod.email(),
+  "password": zod.string().min(1)
+})
+
+export const LoginResponse = zod.object({
+  "id": zod.uuid(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "scope": zod.enum(['PLATFORM', 'ORGANIZATION']),
+  "platform_role": zod.union([zod.enum(['PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN', 'PLATFORM_TECHNICIAN']),zod.null()]).optional()
+})
+
+
+/**
+ * @summary Revoke the current session
+ */
+export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary Identity and reachable organizations for the current principal
+ */
+export const GetCurrentSessionResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "principal_kind": zod.enum(['user', 'platform-api']),
+  "platform_access": zod.boolean(),
+  "user": zod.union([zod.object({
+  "id": zod.uuid(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "scope": zod.enum(['PLATFORM', 'ORGANIZATION']),
+  "platform_role": zod.union([zod.enum(['PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN', 'PLATFORM_TECHNICIAN']),zod.null()]).optional()
+}),zod.null()]).optional(),
+  "organizations": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "status": zod.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']),
+  "role": zod.union([zod.enum(['ORGANIZATION_ADMIN', 'ORGANIZATION_TECHNICIAN', 'ORGANIZATION_VIEWER']),zod.null()]).optional()
+}))
+})
+
+
+/**
+ * @summary List organizations the caller may reach
+ */
+export const listOrganizationsQueryPageDefault = 1;
+
+export const listOrganizationsQueryPageSizeDefault = 25;
+export const listOrganizationsQueryPageSizeMax = 100;
+
+
+
+export const ListOrganizationsQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "status": zod.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).optional(),
+  "page": zod.coerce.number().int().min(1).default(listOrganizationsQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listOrganizationsQueryPageSizeMax).default(listOrganizationsQueryPageSizeDefault)
+})
+
+export const ListOrganizationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "status": zod.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']),
+  "external_reference": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "archived_at": zod.coerce.date().nullish()
+}).and(zod.object({
+  "site_count": zod.int(),
+  "device_count": zod.int(),
+  "online_device_count": zod.int(),
+  "active_alert_count": zod.int(),
+  "last_activity_at": zod.coerce.date().nullish(),
+  "role": zod.union([zod.enum(['ORGANIZATION_ADMIN', 'ORGANIZATION_TECHNICIAN', 'ORGANIZATION_VIEWER']),zod.null()]).optional()
+}))),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+/**
+ * @summary Create an organization
+ */
+export const createOrganizationBodyNameMax = 200;
+
+export const createOrganizationBodySlugMax = 120;
+
+
+
+export const CreateOrganizationBody = zod.object({
+  "name": zod.string().min(1).max(createOrganizationBodyNameMax),
+  "slug": zod.string().min(1).max(createOrganizationBodySlugMax),
+  "external_reference": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const CreateOrganizationResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "status": zod.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']),
+  "external_reference": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "archived_at": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Organization detail with fleet counts
+ */
+export const GetOrganizationParams = zod.object({
+  "organization_id": zod.uuid()
+})
+
+export const GetOrganizationResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "status": zod.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']),
+  "external_reference": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "archived_at": zod.coerce.date().nullish()
+}).and(zod.object({
+  "site_count": zod.int(),
+  "device_count": zod.int(),
+  "online_device_count": zod.int(),
+  "active_alert_count": zod.int(),
+  "last_activity_at": zod.coerce.date().nullish(),
+  "role": zod.union([zod.enum(['ORGANIZATION_ADMIN', 'ORGANIZATION_TECHNICIAN', 'ORGANIZATION_VIEWER']),zod.null()]).optional()
+})).and(zod.object({
+  "member_count": zod.int().optional()
+}))
+
+
+/**
+ * @summary Update an organization, including suspend and archive
+ */
+export const UpdateOrganizationParams = zod.object({
+  "organization_id": zod.uuid()
+})
+
+export const updateOrganizationBodyNameMax = 200;
+
+
+
+export const UpdateOrganizationBody = zod.object({
+  "name": zod.string().min(1).max(updateOrganizationBodyNameMax).optional(),
+  "status": zod.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).optional(),
+  "external_reference": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const UpdateOrganizationResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "status": zod.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']),
+  "external_reference": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "archived_at": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Sites belonging to an organization
+ */
+export const ListOrganizationSitesParams = zod.object({
+  "organization_id": zod.uuid()
+})
+
+export const listOrganizationSitesQueryIncludeArchivedDefault = false;
+
+export const ListOrganizationSitesQueryParams = zod.object({
+  "include_archived": zod.coerce.boolean().default(listOrganizationSitesQueryIncludeArchivedDefault)
+})
+
+export const ListOrganizationSitesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "organization_id": zod.uuid(),
+  "name": zod.string(),
+  "code": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "timezone": zod.string().nullish(),
+  "status": zod.enum(['ACTIVE', 'ARCHIVED']),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "archived_at": zod.coerce.date().nullish(),
+  "device_count": zod.int().optional()
+}))
+})
+
+
+/**
+ * @summary Create a site inside an organization
+ */
+export const CreateSiteParams = zod.object({
+  "organization_id": zod.uuid()
+})
+
+export const createSiteBodyNameMax = 200;
+
+
+
+export const CreateSiteBody = zod.object({
+  "name": zod.string().min(1).max(createSiteBodyNameMax),
+  "code": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "timezone": zod.string().nullish()
+})
+
+export const CreateSiteResponse = zod.object({
+  "id": zod.uuid(),
+  "organization_id": zod.uuid(),
+  "name": zod.string(),
+  "code": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "timezone": zod.string().nullish(),
+  "status": zod.enum(['ACTIVE', 'ARCHIVED']),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "archived_at": zod.coerce.date().nullish(),
+  "device_count": zod.int().optional()
+})
+
+
+/**
+ * @summary Get a site
+ */
+export const GetSiteParams = zod.object({
+  "site_id": zod.uuid()
+})
+
+export const GetSiteResponse = zod.object({
+  "id": zod.uuid(),
+  "organization_id": zod.uuid(),
+  "name": zod.string(),
+  "code": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "timezone": zod.string().nullish(),
+  "status": zod.enum(['ACTIVE', 'ARCHIVED']),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "archived_at": zod.coerce.date().nullish(),
+  "device_count": zod.int().optional()
+})
+
+
+/**
+ * @summary Update or archive a site
+ */
+export const UpdateSiteParams = zod.object({
+  "site_id": zod.uuid()
+})
+
+export const updateSiteBodyNameMax = 200;
+
+
+
+export const UpdateSiteBody = zod.object({
+  "name": zod.string().min(1).max(updateSiteBodyNameMax).optional(),
+  "code": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "timezone": zod.string().nullish(),
+  "status": zod.enum(['ACTIVE', 'ARCHIVED']).optional()
+})
+
+export const UpdateSiteResponse = zod.object({
+  "id": zod.uuid(),
+  "organization_id": zod.uuid(),
+  "name": zod.string(),
+  "code": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "timezone": zod.string().nullish(),
+  "status": zod.enum(['ACTIVE', 'ARCHIVED']),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "archived_at": zod.coerce.date().nullish(),
+  "device_count": zod.int().optional()
+})
+
+
+/**
+ * @summary Members of an organization
+ */
+export const ListOrganizationMembersParams = zod.object({
+  "organization_id": zod.uuid()
+})
+
+export const ListOrganizationMembersResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "user_id": zod.uuid(),
+  "email": zod.string().optional(),
+  "name": zod.string().optional(),
+  "status": zod.enum(['ACTIVE', 'DISABLED']).optional(),
+  "role": zod.enum(['ORGANIZATION_ADMIN', 'ORGANIZATION_TECHNICIAN', 'ORGANIZATION_VIEWER']),
+  "created_at": zod.coerce.date().optional()
+}))
+})
+
+
+/**
+ * @summary Add an existing user to an organization
+ */
+export const CreateOrganizationMemberParams = zod.object({
+  "organization_id": zod.uuid()
+})
+
+export const CreateOrganizationMemberBody = zod.object({
+  "user_id": zod.uuid(),
+  "role": zod.enum(['ORGANIZATION_ADMIN', 'ORGANIZATION_TECHNICIAN', 'ORGANIZATION_VIEWER'])
+})
+
+export const CreateOrganizationMemberResponse = zod.object({
+  "id": zod.uuid(),
+  "user_id": zod.uuid(),
+  "email": zod.string().optional(),
+  "name": zod.string().optional(),
+  "status": zod.enum(['ACTIVE', 'DISABLED']).optional(),
+  "role": zod.enum(['ORGANIZATION_ADMIN', 'ORGANIZATION_TECHNICIAN', 'ORGANIZATION_VIEWER']),
+  "created_at": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Change a member's organization role
+ */
+export const UpdateOrganizationMemberParams = zod.object({
+  "organization_id": zod.uuid(),
+  "user_id": zod.uuid()
+})
+
+export const UpdateOrganizationMemberBody = zod.object({
+  "role": zod.enum(['ORGANIZATION_ADMIN', 'ORGANIZATION_TECHNICIAN', 'ORGANIZATION_VIEWER'])
+})
+
+export const UpdateOrganizationMemberResponse = zod.object({
+  "id": zod.uuid(),
+  "user_id": zod.uuid(),
+  "email": zod.string().optional(),
+  "name": zod.string().optional(),
+  "status": zod.enum(['ACTIVE', 'DISABLED']).optional(),
+  "role": zod.enum(['ORGANIZATION_ADMIN', 'ORGANIZATION_TECHNICIAN', 'ORGANIZATION_VIEWER']),
+  "created_at": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Remove a member from an organization
+ */
+export const DeleteOrganizationMemberParams = zod.object({
+  "organization_id": zod.uuid(),
+  "user_id": zod.uuid()
+})
+
+export const DeleteOrganizationMemberResponse = zod.void()
+
+
+/**
  * @summary Get dashboard summary
  */
 export const GetDashboardSummaryResponse = zod.object({
@@ -45,6 +440,368 @@ export const GetDashboardActivityResponse = zod.array(GetDashboardActivityRespon
 
 
 /**
+ * @summary Get centralized device health and resource pressure
+ */
+export const getDashboardHealthResponseHighestCpuMax = 5;
+
+export const getDashboardHealthResponseHighestMemoryMax = 5;
+
+export const getDashboardHealthResponseHighestDiskMax = 5;
+
+
+
+export const GetDashboardHealthResponse = zod.object({
+  "warning_devices": zod.int(),
+  "critical_devices": zod.int(),
+  "devices": zod.array(zod.object({
+  "id": zod.uuid(),
+  "hostname": zod.string(),
+  "status": zod.enum(['ONLINE', 'OFFLINE', 'UNKNOWN']),
+  "health": zod.enum(['HEALTHY', 'WARNING', 'CRITICAL', 'OFFLINE', 'UNKNOWN']),
+  "cpu_percent": zod.number().nullable(),
+  "ram_percent": zod.number().nullable(),
+  "disk_percent": zod.number().nullable(),
+  "last_seen_at": zod.coerce.date().nullable()
+})),
+  "highest_cpu": zod.array(zod.object({
+  "id": zod.uuid(),
+  "hostname": zod.string(),
+  "status": zod.enum(['ONLINE', 'OFFLINE', 'UNKNOWN']),
+  "health": zod.enum(['HEALTHY', 'WARNING', 'CRITICAL', 'OFFLINE', 'UNKNOWN']),
+  "cpu_percent": zod.number().nullable(),
+  "ram_percent": zod.number().nullable(),
+  "disk_percent": zod.number().nullable(),
+  "last_seen_at": zod.coerce.date().nullable()
+})).max(getDashboardHealthResponseHighestCpuMax),
+  "highest_memory": zod.array(zod.object({
+  "id": zod.uuid(),
+  "hostname": zod.string(),
+  "status": zod.enum(['ONLINE', 'OFFLINE', 'UNKNOWN']),
+  "health": zod.enum(['HEALTHY', 'WARNING', 'CRITICAL', 'OFFLINE', 'UNKNOWN']),
+  "cpu_percent": zod.number().nullable(),
+  "ram_percent": zod.number().nullable(),
+  "disk_percent": zod.number().nullable(),
+  "last_seen_at": zod.coerce.date().nullable()
+})).max(getDashboardHealthResponseHighestMemoryMax),
+  "highest_disk": zod.array(zod.object({
+  "id": zod.uuid(),
+  "hostname": zod.string(),
+  "status": zod.enum(['ONLINE', 'OFFLINE', 'UNKNOWN']),
+  "health": zod.enum(['HEALTHY', 'WARNING', 'CRITICAL', 'OFFLINE', 'UNKNOWN']),
+  "cpu_percent": zod.number().nullable(),
+  "ram_percent": zod.number().nullable(),
+  "disk_percent": zod.number().nullable(),
+  "last_seen_at": zod.coerce.date().nullable()
+})).max(getDashboardHealthResponseHighestDiskMax)
+})
+
+
+/**
+ * @summary Get active alert counts and recent alerts
+ */
+
+export const getDashboardAlertsResponseRecentMax = 5;
+
+
+
+export const GetDashboardAlertsResponse = zod.object({
+  "active_alerts": zod.int(),
+  "critical_alerts": zod.int(),
+  "warning_alerts": zod.int(),
+  "recent": zod.array(zod.object({
+  "id": zod.uuid(),
+  "organization": zod.string(),
+  "device_id": zod.uuid(),
+  "device": zod.object({
+  "id": zod.uuid(),
+  "hostname": zod.string(),
+  "last_seen_at": zod.coerce.date().nullish()
+}),
+  "type": zod.enum(['DEVICE_OFFLINE', 'CPU_HIGH', 'MEMORY_HIGH', 'DISK_HIGH']),
+  "severity": zod.enum(['warning', 'critical']),
+  "state": zod.enum(['OPEN', 'ACKNOWLEDGED', 'RESOLVED']),
+  "resource": zod.string().nullable(),
+  "title": zod.string(),
+  "summary": zod.string(),
+  "opened_at": zod.coerce.date(),
+  "last_triggered_at": zod.coerce.date(),
+  "acknowledged_at": zod.coerce.date().nullable(),
+  "resolved_at": zod.coerce.date().nullable(),
+  "acknowledged_by": zod.string().nullable(),
+  "trigger_value": zod.number().nullable(),
+  "threshold_value": zod.number().nullable(),
+  "occurrence_count": zod.int().min(1),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})).max(getDashboardAlertsResponseRecentMax)
+})
+
+
+/**
+ * @summary List alert incidents
+ */
+export const listAlertsQueryPageDefault = 1;
+
+export const listAlertsQueryPageSizeDefault = 25;
+export const listAlertsQueryPageSizeMax = 100;
+
+
+
+export const ListAlertsQueryParams = zod.object({
+  "state": zod.enum(['OPEN', 'ACKNOWLEDGED', 'RESOLVED']).optional(),
+  "severity": zod.enum(['warning', 'critical']).optional(),
+  "type": zod.enum(['DEVICE_OFFLINE', 'CPU_HIGH', 'MEMORY_HIGH', 'DISK_HIGH']).optional(),
+  "device_id": zod.uuid().optional(),
+  "organization": zod.coerce.string().optional(),
+  "active": zod.coerce.boolean().optional(),
+  "page": zod.coerce.number().int().min(1).default(listAlertsQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listAlertsQueryPageSizeMax).default(listAlertsQueryPageSizeDefault)
+})
+
+
+
+
+export const ListAlertsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "organization": zod.string(),
+  "device_id": zod.uuid(),
+  "device": zod.object({
+  "id": zod.uuid(),
+  "hostname": zod.string(),
+  "last_seen_at": zod.coerce.date().nullish()
+}),
+  "type": zod.enum(['DEVICE_OFFLINE', 'CPU_HIGH', 'MEMORY_HIGH', 'DISK_HIGH']),
+  "severity": zod.enum(['warning', 'critical']),
+  "state": zod.enum(['OPEN', 'ACKNOWLEDGED', 'RESOLVED']),
+  "resource": zod.string().nullable(),
+  "title": zod.string(),
+  "summary": zod.string(),
+  "opened_at": zod.coerce.date(),
+  "last_triggered_at": zod.coerce.date(),
+  "acknowledged_at": zod.coerce.date().nullable(),
+  "resolved_at": zod.coerce.date().nullable(),
+  "acknowledged_by": zod.string().nullable(),
+  "trigger_value": zod.number().nullable(),
+  "threshold_value": zod.number().nullable(),
+  "occurrence_count": zod.int().min(1),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+/**
+ * @summary Get alert detail and timeline
+ */
+export const GetAlertParams = zod.object({
+  "alert_id": zod.uuid()
+})
+
+
+
+
+export const GetAlertResponse = zod.object({
+  "id": zod.uuid(),
+  "organization": zod.string(),
+  "device_id": zod.uuid(),
+  "device": zod.object({
+  "id": zod.uuid(),
+  "hostname": zod.string(),
+  "last_seen_at": zod.coerce.date().nullish()
+}),
+  "type": zod.enum(['DEVICE_OFFLINE', 'CPU_HIGH', 'MEMORY_HIGH', 'DISK_HIGH']),
+  "severity": zod.enum(['warning', 'critical']),
+  "state": zod.enum(['OPEN', 'ACKNOWLEDGED', 'RESOLVED']),
+  "resource": zod.string().nullable(),
+  "title": zod.string(),
+  "summary": zod.string(),
+  "opened_at": zod.coerce.date(),
+  "last_triggered_at": zod.coerce.date(),
+  "acknowledged_at": zod.coerce.date().nullable(),
+  "resolved_at": zod.coerce.date().nullable(),
+  "acknowledged_by": zod.string().nullable(),
+  "trigger_value": zod.number().nullable(),
+  "threshold_value": zod.number().nullable(),
+  "occurrence_count": zod.int().min(1),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+}).and(zod.object({
+  "events": zod.array(zod.object({
+  "id": zod.uuid(),
+  "event_type": zod.enum(['CREATED', 'SEVERITY_CHANGED', 'ACKNOWLEDGED', 'RESOLVED']),
+  "previous_state": zod.union([zod.enum(['OPEN', 'ACKNOWLEDGED', 'RESOLVED']),zod.null()]),
+  "new_state": zod.union([zod.enum(['OPEN', 'ACKNOWLEDGED', 'RESOLVED']),zod.null()]),
+  "previous_severity": zod.union([zod.enum(['warning', 'critical']),zod.null()]),
+  "new_severity": zod.union([zod.enum(['warning', 'critical']),zod.null()]),
+  "actor": zod.string().nullable(),
+  "timestamp": zod.coerce.date(),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullable()
+}))
+}))
+
+
+/**
+ * @summary Acknowledge an open alert
+ */
+export const AcknowledgeAlertParams = zod.object({
+  "alert_id": zod.uuid()
+})
+
+
+
+
+export const AcknowledgeAlertResponse = zod.object({
+  "id": zod.uuid(),
+  "organization": zod.string(),
+  "device_id": zod.uuid(),
+  "device": zod.object({
+  "id": zod.uuid(),
+  "hostname": zod.string(),
+  "last_seen_at": zod.coerce.date().nullish()
+}),
+  "type": zod.enum(['DEVICE_OFFLINE', 'CPU_HIGH', 'MEMORY_HIGH', 'DISK_HIGH']),
+  "severity": zod.enum(['warning', 'critical']),
+  "state": zod.enum(['OPEN', 'ACKNOWLEDGED', 'RESOLVED']),
+  "resource": zod.string().nullable(),
+  "title": zod.string(),
+  "summary": zod.string(),
+  "opened_at": zod.coerce.date(),
+  "last_triggered_at": zod.coerce.date(),
+  "acknowledged_at": zod.coerce.date().nullable(),
+  "resolved_at": zod.coerce.date().nullable(),
+  "acknowledged_by": zod.string().nullable(),
+  "trigger_value": zod.number().nullable(),
+  "threshold_value": zod.number().nullable(),
+  "occurrence_count": zod.int().min(1),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date()
+})
+
+
+/**
+ * @summary List notification delivery history
+ */
+export const listNotificationsQueryPageDefault = 1;
+
+export const listNotificationsQueryPageSizeDefault = 25;
+export const listNotificationsQueryPageSizeMax = 100;
+
+
+
+export const ListNotificationsQueryParams = zod.object({
+  "state": zod.enum(['PENDING', 'PROCESSING', 'SENT', 'RETRY', 'FAILED', 'CANCELLED']).optional(),
+  "channel": zod.enum(['telegram', 'email', 'webhook']).optional(),
+  "event_type": zod.enum(['ALERT_CREATED', 'ALERT_ESCALATED', 'ALERT_ACKNOWLEDGED', 'ALERT_RESOLVED', 'TEST']).optional(),
+  "alert_id": zod.uuid().optional(),
+  "device_id": zod.uuid().optional(),
+  "page": zod.coerce.number().int().min(1).default(listNotificationsQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listNotificationsQueryPageSizeMax).default(listNotificationsQueryPageSizeDefault)
+})
+
+export const ListNotificationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "organization": zod.string(),
+  "alert_id": zod.uuid().nullable(),
+  "alert_event_id": zod.uuid().nullable(),
+  "channel": zod.enum(['telegram', 'email', 'webhook']),
+  "destination": zod.string(),
+  "event_type": zod.enum(['ALERT_CREATED', 'ALERT_ESCALATED', 'ALERT_ACKNOWLEDGED', 'ALERT_RESOLVED', 'TEST']),
+  "severity": zod.union([zod.enum(['warning', 'critical']),zod.null()]),
+  "state": zod.enum(['PENDING', 'PROCESSING', 'SENT', 'RETRY', 'FAILED', 'CANCELLED']),
+  "attempt_count": zod.int(),
+  "max_attempts": zod.int(),
+  "next_attempt_at": zod.coerce.date(),
+  "last_attempt_at": zod.coerce.date().nullable(),
+  "sent_at": zod.coerce.date().nullable(),
+  "failed_at": zod.coerce.date().nullable(),
+  "last_error_code": zod.string().nullable(),
+  "last_error_message": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "device": zod.union([zod.object({
+  "hostname": zod.string().nullable()
+}),zod.null()])
+})),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+/**
+ * @summary Get notification delivery detail
+ */
+export const GetNotificationParams = zod.object({
+  "notification_id": zod.uuid()
+})
+
+export const GetNotificationResponse = zod.object({
+  "id": zod.uuid(),
+  "organization": zod.string(),
+  "alert_id": zod.uuid().nullable(),
+  "alert_event_id": zod.uuid().nullable(),
+  "channel": zod.enum(['telegram', 'email', 'webhook']),
+  "destination": zod.string(),
+  "event_type": zod.enum(['ALERT_CREATED', 'ALERT_ESCALATED', 'ALERT_ACKNOWLEDGED', 'ALERT_RESOLVED', 'TEST']),
+  "severity": zod.union([zod.enum(['warning', 'critical']),zod.null()]),
+  "state": zod.enum(['PENDING', 'PROCESSING', 'SENT', 'RETRY', 'FAILED', 'CANCELLED']),
+  "attempt_count": zod.int(),
+  "max_attempts": zod.int(),
+  "next_attempt_at": zod.coerce.date(),
+  "last_attempt_at": zod.coerce.date().nullable(),
+  "sent_at": zod.coerce.date().nullable(),
+  "failed_at": zod.coerce.date().nullable(),
+  "last_error_code": zod.string().nullable(),
+  "last_error_message": zod.string().nullable(),
+  "created_at": zod.coerce.date(),
+  "updated_at": zod.coerce.date(),
+  "device": zod.union([zod.object({
+  "hostname": zod.string().nullable()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Get secret-safe channel and worker status
+ */
+export const GetNotificationChannelsResponse = zod.object({
+  "channels": zod.array(zod.object({
+  "channel": zod.enum(['telegram', 'email', 'webhook']),
+  "enabled": zod.boolean(),
+  "configured": zod.boolean(),
+  "destination": zod.string().nullable()
+})),
+  "worker": zod.object({
+  "healthy": zod.boolean(),
+  "last_seen_at": zod.coerce.date().nullable()
+}),
+  "queue": zod.object({
+  "pending": zod.int(),
+  "failed": zod.int()
+})
+})
+
+
+/**
+ * @summary Queue a test notification through the worker
+ */
+export const TestNotificationChannelParams = zod.object({
+  "channel": zod.enum(['telegram', 'email', 'webhook'])
+})
+
+export const TestNotificationChannelResponse = zod.object({
+  "id": zod.uuid(),
+  "state": zod.enum(['PENDING', 'PROCESSING', 'SENT', 'RETRY', 'FAILED', 'CANCELLED']),
+  "channel": zod.enum(['telegram', 'email', 'webhook'])
+})
+
+
+/**
  * @summary List enrolled devices
  */
 export const listDevicesQueryPageDefault = 1;
@@ -58,7 +815,9 @@ export const ListDevicesQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "status": zod.enum(['ONLINE', 'OFFLINE', 'UNKNOWN']).optional(),
   "page": zod.coerce.number().int().min(1).default(listDevicesQueryPageDefault),
-  "page_size": zod.coerce.number().int().min(1).max(listDevicesQueryPageSizeMax).default(listDevicesQueryPageSizeDefault)
+  "page_size": zod.coerce.number().int().min(1).max(listDevicesQueryPageSizeMax).default(listDevicesQueryPageSizeDefault),
+  "organization_id": zod.uuid().optional(),
+  "site_id": zod.uuid().optional()
 })
 
 export const ListDevicesResponse = zod.object({
@@ -76,6 +835,11 @@ export const ListDevicesResponse = zod.object({
   "architecture": zod.string().nullish(),
   "ip_address": zod.string().nullish(),
   "agent_version": zod.string().nullish(),
+  "organization_id": zod.uuid(),
+  "organization_name": zod.string().nullish(),
+  "organization_slug": zod.string().nullish(),
+  "site_id": zod.uuid().nullish(),
+  "site_name": zod.string().nullish(),
   "cpu_percent": zod.number().nullish(),
   "ram_percent": zod.number().nullish(),
   "disk_percent": zod.number().nullish(),
@@ -112,6 +876,11 @@ export const GetDeviceResponse = zod.object({
   "architecture": zod.string().nullish(),
   "ip_address": zod.string().nullish(),
   "agent_version": zod.string().nullish(),
+  "organization_id": zod.uuid(),
+  "organization_name": zod.string().nullish(),
+  "organization_slug": zod.string().nullish(),
+  "site_id": zod.uuid().nullish(),
+  "site_name": zod.string().nullish(),
   "cpu_percent": zod.number().nullish(),
   "ram_percent": zod.number().nullish(),
   "disk_percent": zod.number().nullish(),
@@ -149,23 +918,100 @@ export const GetDeviceResponse = zod.object({
 
 
 /**
+ * The site must belong to the device's organization. Device organization is immutable through the device APIs and cannot be changed here.
+ * @summary Assign a device to a site within its own organization
+ */
+export const SetDeviceSiteParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const SetDeviceSiteBody = zod.object({
+  "site_id": zod.union([zod.uuid(),zod.null()])
+})
+
+export const SetDeviceSiteResponse = zod.object({
+  "id": zod.uuid(),
+  "organization_id": zod.uuid(),
+  "site_id": zod.uuid().nullish()
+})
+
+
+/**
  * @summary Get stored device metrics
  */
 export const GetDeviceMetricsParams = zod.object({
   "device_id": zod.uuid()
 })
 
-export const GetDeviceMetricsResponseItem = zod.object({
-  "captured_at": zod.coerce.date(),
-  "received_at": zod.coerce.date(),
-  "cpu_percent": zod.number(),
-  "ram_percent": zod.number(),
-  "ram_used_bytes": zod.int(),
-  "ram_available_bytes": zod.int(),
-  "disk_percent": zod.number(),
-  "uptime_seconds": zod.int()
+export const getDeviceMetricsQueryResolutionDefault = `auto`;
+
+export const GetDeviceMetricsQueryParams = zod.object({
+  "from": zod.date().optional().describe('Inclusive ISO 8601 timestamp; defaults to one hour before `to`.'),
+  "to": zod.date().optional().describe('Inclusive ISO 8601 timestamp; defaults to the current server time.'),
+  "resolution": zod.enum(['raw', 'hour', 'day', 'auto']).default(getDeviceMetricsQueryResolutionDefault)
 })
-export const GetDeviceMetricsResponse = zod.array(GetDeviceMetricsResponseItem)
+
+
+
+
+
+export const GetDeviceMetricsResponse = zod.object({
+  "resolution": zod.enum(['raw', 'hour', 'day']),
+  "from": zod.coerce.date(),
+  "to": zod.coerce.date(),
+  "points": zod.array(zod.object({
+  "timestamp": zod.coerce.date(),
+  "captured_at": zod.coerce.date().optional(),
+  "cpu_avg": zod.number(),
+  "cpu_min": zod.number(),
+  "cpu_max": zod.number(),
+  "ram_avg": zod.number(),
+  "ram_min": zod.number(),
+  "ram_max": zod.number(),
+  "ram_used_avg_bytes": zod.number(),
+  "ram_available_avg_bytes": zod.number(),
+  "uptime_seconds": zod.int(),
+  "sample_count": zod.int().min(1)
+})),
+  "disks": zod.array(zod.object({
+  "volume": zod.string(),
+  "points": zod.array(zod.object({
+  "timestamp": zod.coerce.date(),
+  "usage_avg": zod.number(),
+  "usage_min": zod.number(),
+  "usage_max": zod.number(),
+  "usage_latest": zod.number(),
+  "total_bytes": zod.number(),
+  "used_bytes": zod.number(),
+  "free_bytes": zod.number(),
+  "sample_count": zod.int().min(1)
+}))
+}))
+})
+
+
+/**
+ * @summary Get current centralized health and downtime state
+ */
+export const GetDeviceMonitoringParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const GetDeviceMonitoringResponse = zod.object({
+  "status": zod.enum(['ONLINE', 'OFFLINE', 'UNKNOWN']),
+  "health": zod.enum(['HEALTHY', 'WARNING', 'CRITICAL', 'OFFLINE', 'UNKNOWN']),
+  "downtime": zod.object({
+  "last_offline_at": zod.coerce.date().nullable(),
+  "last_recovery_at": zod.coerce.date().nullable(),
+  "last_completed_outage_seconds": zod.number().nullable(),
+  "ongoing_outage_seconds": zod.number().nullable()
+}),
+  "activity": zod.array(zod.object({
+  "id": zod.uuid(),
+  "event": zod.string(),
+  "timestamp": zod.coerce.date()
+}))
+})
 
 
 /**
@@ -173,7 +1019,7 @@ export const GetDeviceMetricsResponse = zod.array(GetDeviceMetricsResponseItem)
  */
 
 
-
+export const enrollAgentBodyMachineGuidHashRegExp = new RegExp('^[a-fA-F0-9]{64}$');
 
 
 
@@ -181,7 +1027,7 @@ export const EnrollAgentBody = zod.object({
   "enrollment_token": zod.string().min(1),
   "device_uuid": zod.uuid(),
   "hostname": zod.string().min(1),
-  "machine_guid_hash": zod.string().min(1),
+  "machine_guid_hash": zod.string().regex(enrollAgentBodyMachineGuidHashRegExp),
   "agent_version": zod.string().min(1)
 })
 
@@ -214,6 +1060,10 @@ export const PostHeartbeatResponse = zod.void()
 /**
  * @summary Receive endpoint inventory
  */
+export const postInventoryBodySoftwareEntriesMax = 5000;
+
+
+
 export const PostInventoryBody = zod.object({
   "hostname": zod.string(),
   "device_uuid": zod.uuid(),
@@ -223,7 +1073,25 @@ export const PostInventoryBody = zod.object({
   "os": zod.record(zod.string(), zod.unknown()),
   "hardware": zod.record(zod.string(), zod.unknown()),
   "disks": zod.array(zod.record(zod.string(), zod.unknown())),
-  "network": zod.array(zod.record(zod.string(), zod.unknown()))
+  "network": zod.array(zod.record(zod.string(), zod.unknown())),
+  "software": zod.object({
+  "complete": zod.boolean(),
+  "collected_at": zod.coerce.date(),
+  "error_code": zod.string().nullish(),
+  "entries": zod.array(zod.object({
+  "name": zod.string(),
+  "version": zod.string().nullish(),
+  "publisher": zod.string().nullish(),
+  "install_date": zod.coerce.date().nullish(),
+  "install_location": zod.string().nullish(),
+  "uninstall_available": zod.boolean(),
+  "product_code": zod.string().nullish(),
+  "architecture": zod.enum(['x64', 'x86', 'unknown']),
+  "source": zod.enum(['windows_registry']),
+  "system_component": zod.boolean(),
+  "identity": zod.string()
+})).max(postInventoryBodySoftwareEntriesMax)
+}).optional()
 })
 
 export const PostInventoryResponse = zod.void()
@@ -247,6 +1115,8 @@ export const postMetricsBodyDiskPercentMax = 100;
 
 export const postMetricsBodyUptimeSecondsMin = 0;
 
+export const postMetricsBodyDisksMax = 64;
+
 
 
 export const PostMetricsBody = zod.object({
@@ -256,9 +1126,331 @@ export const PostMetricsBody = zod.object({
   "ram_used_bytes": zod.int().min(postMetricsBodyRamUsedBytesMin),
   "ram_available_bytes": zod.int().min(postMetricsBodyRamAvailableBytesMin),
   "disk_percent": zod.number().min(postMetricsBodyDiskPercentMin).max(postMetricsBodyDiskPercentMax),
-  "uptime_seconds": zod.int().min(postMetricsBodyUptimeSecondsMin)
+  "uptime_seconds": zod.int().min(postMetricsBodyUptimeSecondsMin),
+  "disks": zod.array(zod.object({
+  "drive": zod.string(),
+  "filesystem": zod.string(),
+  "total_bytes": zod.int(),
+  "used_bytes": zod.int(),
+  "free_bytes": zod.int(),
+  "used_percent": zod.number()
+})).max(postMetricsBodyDisksMax).optional()
 })
 
 export const PostMetricsResponse = zod.void()
+
+
+export const postServicesSnapshotBodyOneItemCountMin = 0;
+
+export const postServicesSnapshotBodyOneAgentVersionMax = 50;
+
+export const postServicesSnapshotBodyTwoItemsItemServiceNameMax = 256;
+
+export const postServicesSnapshotBodyTwoItemsItemDisplayNameMax = 512;
+
+export const postServicesSnapshotBodyTwoItemsItemLogonAsMax = 512;
+
+
+export const postServicesSnapshotBodyTwoItemsMax = 5000;
+
+
+
+export const PostServicesSnapshotBody = zod.object({
+  "snapshot_id": zod.uuid(),
+  "collected_at": zod.coerce.date(),
+  "collection_status": zod.enum(['complete', 'partial', 'failed']),
+  "item_count": zod.int().min(postServicesSnapshotBodyOneItemCountMin),
+  "agent_version": zod.string().max(postServicesSnapshotBodyOneAgentVersionMax)
+}).and(zod.object({
+  "items": zod.array(zod.object({
+  "service_name": zod.string().max(postServicesSnapshotBodyTwoItemsItemServiceNameMax),
+  "display_name": zod.string().max(postServicesSnapshotBodyTwoItemsItemDisplayNameMax),
+  "status": zod.string(),
+  "startup_type": zod.string(),
+  "logon_as": zod.string().max(postServicesSnapshotBodyTwoItemsItemLogonAsMax).nullish(),
+  "process_id": zod.int().min(1).nullish()
+})).max(postServicesSnapshotBodyTwoItemsMax)
+}))
+
+export const PostServicesSnapshotResponse = zod.void()
+
+
+export const postProcessesSnapshotBodyOneItemCountMin = 0;
+
+export const postProcessesSnapshotBodyOneAgentVersionMax = 50;
+
+
+export const postProcessesSnapshotBodyTwoItemsItemProcessNameMax = 512;
+
+export const postProcessesSnapshotBodyTwoItemsItemCpuTimeSecondsMin = 0;
+
+export const postProcessesSnapshotBodyTwoItemsItemCpuPercentMin = 0;
+export const postProcessesSnapshotBodyTwoItemsItemCpuPercentMax = 100;
+
+export const postProcessesSnapshotBodyTwoItemsItemWorkingSetBytesMin = 0;
+
+export const postProcessesSnapshotBodyTwoItemsMax = 10000;
+
+
+
+export const PostProcessesSnapshotBody = zod.object({
+  "snapshot_id": zod.uuid(),
+  "collected_at": zod.coerce.date(),
+  "collection_status": zod.enum(['complete', 'partial', 'failed']),
+  "item_count": zod.int().min(postProcessesSnapshotBodyOneItemCountMin),
+  "agent_version": zod.string().max(postProcessesSnapshotBodyOneAgentVersionMax)
+}).and(zod.object({
+  "items": zod.array(zod.object({
+  "pid": zod.int().min(1),
+  "process_name": zod.string().max(postProcessesSnapshotBodyTwoItemsItemProcessNameMax),
+  "cpu_time_seconds": zod.number().min(postProcessesSnapshotBodyTwoItemsItemCpuTimeSecondsMin),
+  "cpu_percent": zod.number().min(postProcessesSnapshotBodyTwoItemsItemCpuPercentMin).max(postProcessesSnapshotBodyTwoItemsItemCpuPercentMax).nullish(),
+  "working_set_bytes": zod.int().min(postProcessesSnapshotBodyTwoItemsItemWorkingSetBytesMin),
+  "started_at": zod.coerce.date(),
+  "architecture": zod.enum(['x64', 'x86', 'arm64', 'unknown'])
+})).max(postProcessesSnapshotBodyTwoItemsMax)
+}))
+
+export const PostProcessesSnapshotResponse = zod.void()
+
+
+export const ListEnrollmentTokensResponseItem = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "organization_id": zod.uuid(),
+  "organization_name": zod.string().nullish(),
+  "site_id": zod.uuid().nullish(),
+  "site_name": zod.string().nullish(),
+  "expires_at": zod.coerce.date(),
+  "max_uses": zod.int(),
+  "current_uses": zod.int(),
+  "created_at": zod.coerce.date(),
+  "revoked_at": zod.coerce.date().nullish(),
+  "active": zod.boolean()
+})
+export const ListEnrollmentTokensResponse = zod.array(ListEnrollmentTokensResponseItem)
+
+
+
+export const createEnrollmentTokenBodyMaxUsesMax = 10000;
+
+
+
+export const CreateEnrollmentTokenBody = zod.object({
+  "name": zod.string().min(1),
+  "organization_id": zod.uuid(),
+  "site_id": zod.uuid().nullish(),
+  "expires_at": zod.coerce.date(),
+  "max_uses": zod.int().min(1).max(createEnrollmentTokenBodyMaxUsesMax)
+})
+
+export const CreateEnrollmentTokenResponse = zod.object({
+  "id": zod.uuid(),
+  "name": zod.string(),
+  "organization_id": zod.uuid(),
+  "organization_name": zod.string().nullish(),
+  "site_id": zod.uuid().nullish(),
+  "site_name": zod.string().nullish(),
+  "expires_at": zod.coerce.date(),
+  "max_uses": zod.int(),
+  "current_uses": zod.int(),
+  "created_at": zod.coerce.date(),
+  "revoked_at": zod.coerce.date().nullish(),
+  "active": zod.boolean()
+}).and(zod.object({
+  "token": zod.string()
+}))
+
+
+export const RevokeEnrollmentTokenParams = zod.object({
+  "token_id": zod.uuid()
+})
+
+export const RevokeEnrollmentTokenResponse = zod.void()
+
+
+export const ListDeviceSoftwareParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const listDeviceSoftwareQueryPageDefault = 1;
+
+export const listDeviceSoftwareQueryPageSizeDefault = 25;
+export const listDeviceSoftwareQueryPageSizeMax = 100;
+
+export const listDeviceSoftwareQueryPresentDefault = `true`;
+export const listDeviceSoftwareQuerySortDefault = `name`;
+export const listDeviceSoftwareQueryDirectionDefault = `asc`;
+
+export const ListDeviceSoftwareQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listDeviceSoftwareQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listDeviceSoftwareQueryPageSizeMax).default(listDeviceSoftwareQueryPageSizeDefault),
+  "search": zod.coerce.string().optional(),
+  "publisher": zod.coerce.string().optional(),
+  "architecture": zod.enum(['x64', 'x86', 'unknown']).optional(),
+  "present": zod.enum(['true', 'false', 'all']).default(listDeviceSoftwareQueryPresentDefault),
+  "version": zod.coerce.string().optional(),
+  "sort": zod.enum(['name', 'version', 'publisher', 'first_seen', 'last_seen']).default(listDeviceSoftwareQuerySortDefault),
+  "direction": zod.enum(['asc', 'desc']).default(listDeviceSoftwareQueryDirectionDefault)
+})
+
+export const ListDeviceSoftwareResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown())),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+export const ListDeviceSoftwareChangesParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const listDeviceSoftwareChangesQueryPageDefault = 1;
+
+export const listDeviceSoftwareChangesQueryPageSizeDefault = 25;
+export const listDeviceSoftwareChangesQueryPageSizeMax = 100;
+
+
+
+export const ListDeviceSoftwareChangesQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listDeviceSoftwareChangesQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listDeviceSoftwareChangesQueryPageSizeMax).default(listDeviceSoftwareChangesQueryPageSizeDefault),
+  "change_type": zod.enum(['INSTALLED', 'REMOVED', 'VERSION_CHANGED']).optional()
+})
+
+export const ListDeviceSoftwareChangesResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown())),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+export const listFleetSoftwareQueryPageDefault = 1;
+
+export const listFleetSoftwareQueryPageSizeDefault = 25;
+export const listFleetSoftwareQueryPageSizeMax = 100;
+
+
+
+export const ListFleetSoftwareQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listFleetSoftwareQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listFleetSoftwareQueryPageSizeMax).default(listFleetSoftwareQueryPageSizeDefault),
+  "search": zod.coerce.string().optional(),
+  "publisher": zod.coerce.string().optional(),
+  "architecture": zod.enum(['x64', 'x86', 'unknown']).optional(),
+  "version": zod.coerce.string().optional()
+})
+
+export const ListFleetSoftwareResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown())),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+export const listSoftwareDevicesPathSoftwareIdentityRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const ListSoftwareDevicesParams = zod.object({
+  "software_identity": zod.coerce.string().regex(listSoftwareDevicesPathSoftwareIdentityRegExp)
+})
+
+export const listSoftwareDevicesQueryPageDefault = 1;
+
+export const listSoftwareDevicesQueryPageSizeDefault = 25;
+export const listSoftwareDevicesQueryPageSizeMax = 100;
+
+
+
+export const ListSoftwareDevicesQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listSoftwareDevicesQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listSoftwareDevicesQueryPageSizeMax).default(listSoftwareDevicesQueryPageSizeDefault),
+  "search": zod.coerce.string().optional(),
+  "version": zod.coerce.string().optional()
+})
+
+export const ListSoftwareDevicesResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown())),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+export const ListDeviceServicesParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const listDeviceServicesQueryPageDefault = 1;
+
+export const listDeviceServicesQueryPageSizeDefault = 25;
+export const listDeviceServicesQueryPageSizeMax = 100;
+
+
+
+export const ListDeviceServicesQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listDeviceServicesQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listDeviceServicesQueryPageSizeMax).default(listDeviceServicesQueryPageSizeDefault),
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "startup_type": zod.coerce.string().optional(),
+  "present": zod.enum(['true', 'false', 'all']).optional()
+})
+
+export const ListDeviceServicesResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown())),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+export const ListDeviceServiceEventsParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const ListDeviceServiceEventsResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown())),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+export const ListDeviceProcessesParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const listDeviceProcessesQueryPageDefault = 1;
+
+export const listDeviceProcessesQueryPageSizeDefault = 25;
+export const listDeviceProcessesQueryPageSizeMax = 100;
+
+
+
+export const ListDeviceProcessesQueryParams = zod.object({
+  "page": zod.coerce.number().int().min(1).default(listDeviceProcessesQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listDeviceProcessesQueryPageSizeMax).default(listDeviceProcessesQueryPageSizeDefault),
+  "search": zod.coerce.string().optional(),
+  "username": zod.coerce.string().optional(),
+  "sort": zod.enum(['process_name', 'cpu_percent', 'working_set_bytes', 'started_at']).optional()
+})
+
+export const ListDeviceProcessesResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown())),
+  "page": zod.int(),
+  "page_size": zod.int(),
+  "total": zod.int()
+})
+
+
+export const GetDeviceProcessesSummaryParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const GetDeviceProcessesSummaryResponse = zod.record(zod.string(), zod.unknown())
 
 

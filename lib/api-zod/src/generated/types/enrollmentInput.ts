@@ -12,7 +12,7 @@ export interface EnrollmentInput {
   device_uuid: string;
   /** @minLength 1 */
   hostname: string;
-  /** @minLength 1 */
+  /** @pattern ^[a-fA-F0-9]{64}$ */
   machine_guid_hash: string;
   /** @minLength 1 */
   agent_version: string;

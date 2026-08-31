@@ -2,15 +2,17 @@ import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   Activity,
+  ClipboardList,
   Bell,
   Bot,
   Boxes,
+  Building2,
   ChevronRight,
-  CircleHelp,
   Cpu,
   FileBarChart,
   Laptop,
   LifeBuoy,
+  LogOut,
   Network,
   PanelLeftClose,
   PanelLeftOpen,
@@ -18,23 +20,74 @@ import {
   ShieldCheck,
   Ticket,
 } from 'lucide-react';
+import { useCapability, useOrganizationScope, useSession } from '@/lib/session';
 
 const primaryNav = [
   { href: '/', label: 'Overview', icon: Activity },
   { href: '/devices', label: 'Devices', icon: Laptop },
-  { href: '/alerts', label: 'Alerts', icon: Bell, soon: true },
+  { href: '/alerts', label: 'Alerts', icon: Bell },
   { href: '/automation', label: 'Automation', icon: Bot, soon: true },
   { href: '/patch-management', label: 'Patch management', icon: ShieldCheck, soon: true },
-  { href: '/software', label: 'Software', icon: Boxes, soon: true },
+  { href: '/software', label: 'Software', icon: Boxes },
+  { href: '/audit', label: 'Audit log', icon: ClipboardList },
   { href: '/network', label: 'Network', icon: Network, soon: true },
   { href: '/tickets', label: 'Tickets', icon: Ticket, soon: true },
   { href: '/reports', label: 'Reports', icon: FileBarChart, soon: true },
 ];
 
+function initials(name: string) {
+  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'NX';
+}
+
+function roleLabel(session: ReturnType<typeof useSession>['session']) {
+  if (!session) return '';
+  if (session.principal_kind === 'platform-api') return 'Administrative API';
+  const platformRole = session.user?.platform_role;
+  if (platformRole) return platformRole.replace('PLATFORM_', 'Platform ').replace('_', ' ').toLowerCase();
+  const roles = new Set(session.organizations.map((organization) => organization.role).filter(Boolean));
+  if (roles.size === 1) return [...roles][0]!.replace('ORGANIZATION_', '').toLowerCase();
+  return `${session.organizations.length} organizations`;
+}
+
+/**
+ * Query-scope selector. Choosing an organization narrows what the console asks
+ * for; it cannot widen access, because the server validates the requested
+ * organization against the caller's own memberships.
+ */
+function OrganizationSelector() {
+  const { organizationId, setOrganizationId, organizations } = useOrganizationScope();
+  if (organizations.length <= 1) {
+    return <span className="font-medium text-foreground">{organizations[0]?.name ?? 'Nexora'}</span>;
+  }
+  return (
+    <select
+      value={organizationId ?? ''}
+      onChange={(event) => setOrganizationId(event.target.value || null)}
+      className="h-8 rounded-md border border-border bg-card px-2 text-[11px] font-medium text-foreground outline-none focus:border-accent"
+      aria-label="Organization scope"
+      data-testid="select-organization-scope"
+    >
+      <option value="">All organizations</option>
+      {organizations.map((organization) => (
+        <option key={organization.id} value={organization.id}>{organization.name}</option>
+      ))}
+    </select>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [location] = useLocation();
+  const { session, logout } = useSession();
+  const canAdministerTenancy = useCapability('membership:read');
+  const canReadAudit = useCapability('audit:read');
+  // Platform staff always navigate organizations; an organization user sees the
+  // entry only when their role gives them something to administer there.
+  const showOrganizations = Boolean(session?.platform_access) || canAdministerTenancy;
+  const navItems = (showOrganizations
+    ? [primaryNav[0]!, { href: '/organizations', label: 'Organizations', icon: Building2 }, ...primaryNav.slice(1)]
+    : primaryNav).filter((item) => item.href !== '/audit' || canReadAudit);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -55,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className={`px-4 pt-7 ${collapsed ? 'md:px-3' : ''}`}>
           <p className={`mb-3 px-2 text-[10px] font-bold uppercase tracking-[0.18em] text-sidebar-foreground/40 ${collapsed ? 'md:hidden' : ''}`}>Operations</p>
           <nav className="space-y-1">
-            {primaryNav.map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               const active = item.href === '/' ? location === '/' : location.startsWith(item.href);
               return (
@@ -77,12 +130,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             <ChevronRight size={13} className={collapsed ? 'md:hidden' : ''} />
           </Link>
           <div className={`flex items-center gap-3 rounded-md bg-sidebar-accent/70 p-3 ${collapsed ? 'md:justify-center md:p-2' : ''}`}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c9f3e0] text-[11px] font-bold text-[#173d34]">AR</div>
-            <div className={`${collapsed ? 'md:hidden' : ''} min-w-0`}>
-              <p className="truncate text-[12px] font-semibold">Alex Rivera</p>
-              <p className="truncate text-[10px] text-sidebar-foreground/45">Operations admin</p>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c9f3e0] text-[11px] font-bold text-[#173d34]">
+              {initials(session?.user?.name ?? 'Nexora')}
             </div>
-            <CircleHelp size={15} className={`ml-auto text-sidebar-foreground/35 ${collapsed ? 'md:hidden' : ''}`} />
+            <div className={`${collapsed ? 'md:hidden' : ''} min-w-0`}>
+              <p className="truncate text-[12px] font-semibold" data-testid="text-current-user">{session?.user?.name ?? 'Administrative API'}</p>
+              <p className="truncate text-[10px] capitalize text-sidebar-foreground/45">{roleLabel(session)}</p>
+            </div>
+            <button
+              type="button" onClick={() => void logout()}
+              className={`ml-auto rounded p-1 text-sidebar-foreground/45 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground ${collapsed ? 'md:hidden' : ''}`}
+              aria-label="Sign out" data-testid="button-logout"
+            >
+              <LogOut size={15} />
+            </button>
           </div>
         </div>
       </aside>
@@ -92,8 +153,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <button type="button" onClick={() => setMobileOpen(true)} className="rounded-md p-2 text-muted-foreground hover:bg-muted md:hidden" aria-label="Open navigation" data-testid="button-open-navigation"><PanelLeftOpen size={19} /></button>
             <div className="hidden items-center gap-2 text-[11px] text-muted-foreground sm:flex">
-              <span className="font-mono-data uppercase tracking-[0.12em]">Workspace</span><ChevronRight size={13} />
-              <span className="font-medium text-foreground">Northstar IT</span>
+              <span className="font-mono-data uppercase tracking-[0.12em]">Organization</span><ChevronRight size={13} />
+              <OrganizationSelector />
             </div>
           </div>
           <div className="flex items-center gap-3 text-[11px]">

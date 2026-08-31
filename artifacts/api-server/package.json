@@ -7,7 +7,8 @@
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
-    "test": "node --experimental-strip-types --test ./src/lib/*.test.mjs",
+    "test": "DATABASE_URL=postgresql://test:test@localhost:5432/test node --experimental-strip-types --test ./src/lib/*.test.mjs ./src/telemetry/*.test.mjs ./src/alerts/*.test.mjs ./src/notifications/*.test.mjs ./src/software/*.test.mjs ./src/inventory/*.test.mjs ./src/security/*.test.mjs ./src/tenancy/*.test.mjs",
+    "test:tenancy": "node --experimental-strip-types --test ./src/tenancy/*.integration.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -17,6 +18,8 @@
     "cors": "^2.8.6",
     "drizzle-orm": "catalog:",
     "express": "^5.2.1",
+    "nodemailer": "^7.0.11",
+    "pg": "8.22.0",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0",
     "zod": "catalog:"
@@ -26,6 +29,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
+    "@types/nodemailer": "^7.0.11",
     "esbuild": "0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13.1.3",

@@ -10,6 +10,9 @@ public sealed class AgentWorker(
     HeartbeatService heartbeat,
     InventoryService inventory,
     MetricsService metrics,
+    ServiceInventoryService services,
+    ProcessInventoryService processes,
+    RemoteCommandService remoteCommands,
     BackoffPolicy backoff,
     ILogger<AgentWorker> logger) : BackgroundService
 {
@@ -36,7 +39,10 @@ public sealed class AgentWorker(
         await Task.WhenAll(
             heartbeat.RunAsync(credentials.AgentToken!, stoppingToken),
             inventory.RunAsync(credentials.AgentToken!, stoppingToken),
-            metrics.RunAsync(credentials.AgentToken!, stoppingToken));
+            metrics.RunAsync(credentials.AgentToken!, stoppingToken),
+            services.RunAsync(credentials.AgentToken!, stoppingToken),
+            processes.RunAsync(credentials.AgentToken!, stoppingToken),
+            remoteCommands.RunAsync(credentials, stoppingToken));
     }
 
     public override Task StopAsync(CancellationToken cancellationToken)

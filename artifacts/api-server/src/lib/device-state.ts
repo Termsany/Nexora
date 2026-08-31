@@ -7,3 +7,12 @@ export function deviceState(lastSeenAt: Date | null, now = Date.now(), onlineSec
   if (ageSeconds >= offlineSeconds) return "OFFLINE";
   return "UNKNOWN";
 }
+
+export function configuredDeviceState(lastSeenAt: Date | null, now = Date.now()): DeviceState {
+  return deviceState(
+    lastSeenAt,
+    now,
+    Number(process.env.ONLINE_THRESHOLD_SECONDS ?? 90),
+    Number(process.env.OFFLINE_THRESHOLD_SECONDS ?? 120),
+  );
+}

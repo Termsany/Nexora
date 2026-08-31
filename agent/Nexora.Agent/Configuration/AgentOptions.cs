@@ -6,9 +6,11 @@ public sealed record AgentOptions(
     int HeartbeatIntervalSeconds = 30,
     int MetricsIntervalSeconds = 30,
     int InventoryIntervalHours = 6,
+    int ServicesIntervalSeconds = 300,
+    int ProcessesIntervalSeconds = 60,
     int RequestTimeoutSeconds = 30);
 
 public static class AgentVersion
 {
-    public const string Current = "0.1.0";
+    public const string Current = "0.3.0";
 }

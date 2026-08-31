@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { Activity, ArrowUpRight, BarChart3, HardDrive, RefreshCw, Server, Wifi } from 'lucide-react';
 import { getGetDashboardActivityQueryKey, getGetDashboardSummaryQueryKey, useGetDashboardActivity, useGetDashboardSummary } from '@workspace/api-client-react';
 import { AppShell, PageIntro } from '@/components/app-shell';
 import { MetricCard, Panel, PanelHeading, QueryState } from '@/components/console-ui';
+import { AlertPill, alertTypeLabel, relativeAge, type AlertRecord } from '@/pages/alerts';
 
 function formatRelative(timestamp: string) {
   const diff = Math.max(0, Date.now() - new Date(timestamp).getTime());
@@ -19,9 +21,15 @@ function formatEvent(event: string) {
   return event.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+type HealthDevice = { id: string; hostname: string; status: string; health: string; cpu_percent: number | null; ram_percent: number | null; disk_percent: number | null; last_seen_at: string | null };
+type HealthOverview = { warning_devices: number; critical_devices: number; devices: HealthDevice[]; highest_cpu: HealthDevice[]; highest_memory: HealthDevice[]; highest_disk: HealthDevice[] };
+type AlertOverview = { active_alerts: number; critical_alerts: number; warning_alerts: number; recent: AlertRecord[] };
+
 export default function Overview() {
   const summaryQuery = useGetDashboardSummary({ query: { queryKey: getGetDashboardSummaryQueryKey(), refetchInterval: 30000 } });
   const activityQuery = useGetDashboardActivity({ query: { queryKey: getGetDashboardActivityQueryKey(), refetchInterval: 30000 } });
+  const healthQuery = useQuery({ queryKey: ['dashboard-health'], refetchInterval: 30000, queryFn: async () => { const response = await fetch('/api/v1/dashboard/health'); if (!response.ok) throw new Error('Health query failed'); return response.json() as Promise<HealthOverview>; } });
+  const alertQuery = useQuery({ queryKey: ['dashboard-alerts'], refetchInterval: 30000, queryFn: async () => { const response = await fetch('/api/v1/dashboard/alerts'); if (!response.ok) throw new Error('Alert query failed'); return response.json() as Promise<AlertOverview>; } });
   const summary = summaryQuery.data;
   const activity = activityQuery.data ?? [];
   const healthPercent = summary && summary.total_devices > 0 ? Math.round((summary.online_devices / summary.total_devices) * 100) : 0;
@@ -31,13 +39,19 @@ export default function Overview() {
     { label: 'Unknown', value: summary.unknown_devices, color: '#d59a25' },
   ] : [], [summary]);
 
-  return <AppShell><PageIntro eyebrow="Operational overview" title="Fleet health, at a glance." description="A live read on the endpoints reporting into Northstar IT." action={<button type="button" onClick={() => { void summaryQuery.refetch(); void activityQuery.refetch(); }} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3.5 py-2.5 text-[11px] font-semibold text-primary shadow-xs transition-colors hover:border-accent hover:bg-[#fff9e9]" data-testid="button-refresh-overview"><RefreshCw size={14} className={summaryQuery.isFetching || activityQuery.isFetching ? 'animate-spin' : ''} /> Refresh data</button>} />
+  return <AppShell><PageIntro eyebrow="Operational overview" title="Fleet health, at a glance." description="A live read on the endpoints reporting into Northstar IT." action={<button type="button" onClick={() => { void summaryQuery.refetch(); void activityQuery.refetch(); void healthQuery.refetch(); void alertQuery.refetch(); }} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3.5 py-2.5 text-[11px] font-semibold text-primary shadow-xs transition-colors hover:border-accent hover:bg-[#fff9e9]" data-testid="button-refresh-overview"><RefreshCw size={14} className={summaryQuery.isFetching || activityQuery.isFetching || alertQuery.isFetching ? 'animate-spin' : ''} /> Refresh data</button>} />
     {summaryQuery.isLoading ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><div className="col-span-full grid h-28 animate-pulse rounded-lg bg-muted" /></div> : summaryQuery.isError || !summary ? <Panel><QueryState kind="error" onRetry={() => void summaryQuery.refetch()} /></Panel> : <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Total endpoints" value={summary.total_devices} detail="Enrolled Windows devices" tone="navy" />
         <MetricCard label="Online now" value={summary.online_devices} detail={`${healthPercent}% of enrolled fleet`} tone="mint" trend="up" />
         <MetricCard label="Offline" value={summary.offline_devices} detail="Needs a technician look" tone="red" trend="down" />
-        <MetricCard label="Disk pressure" value={summary.disks_over_threshold} detail="Endpoints above threshold" tone="amber" />
+        <MetricCard label="Warning" value={healthQuery.data?.warning_devices ?? '—'} detail="Sustained resource pressure" tone="amber" />
+        <MetricCard label="Critical" value={healthQuery.data?.critical_devices ?? '—'} detail="Immediate resource pressure" tone="red" />
+      </div>
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <MetricCard label="Active alerts" value={alertQuery.data?.active_alerts ?? '—'} detail="Open and acknowledged incidents" tone="navy" />
+        <MetricCard label="Critical alerts" value={alertQuery.data?.critical_alerts ?? '—'} detail="Active critical incidents" tone="red" />
+        <MetricCard label="Warning alerts" value={alertQuery.data?.warning_alerts ?? '—'} detail="Active warning incidents" tone="amber" />
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.12fr_.88fr]">
         <Panel className="animate-rise-in [animation-delay:100ms]">
@@ -61,17 +75,23 @@ export default function Overview() {
           </div>
         </Panel>
       </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-3">
+        <PressurePanel title="Highest CPU" devices={healthQuery.data?.highest_cpu ?? []} field="cpu_percent" />
+        <PressurePanel title="Highest memory" devices={healthQuery.data?.highest_memory ?? []} field="ram_percent" />
+        <PressurePanel title="Highest disk" devices={healthQuery.data?.highest_disk ?? []} field="disk_percent" />
+      </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
         <Panel className="animate-rise-in [animation-delay:220ms]">
           <PanelHeading eyebrow="Latest signals" title="Recent activity" meta="Most recent events from the endpoint fleet" action={<Link href="/devices" className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#b57504] hover:underline" data-testid="link-view-devices">View inventory <ArrowUpRight size={13} /></Link>} />
           {activityQuery.isLoading ? <div className="p-5"><div className="h-40 animate-pulse rounded-md bg-muted" /></div> : activityQuery.isError ? <QueryState kind="error" onRetry={() => void activityQuery.refetch()} /> : activity.length === 0 ? <QueryState kind="empty" /> : <div className="divide-y divide-border/60">{activity.slice(0, 7).map((item) => <Link href={`/devices/${item.device_id}`} key={item.id} className="group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-muted/45" data-testid={`activity-event-${item.id}`}><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary"><ActivityIcon event={item.event} /></div><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-semibold text-primary group-hover:text-[#b57504]">{formatEvent(item.event)}</p><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{item.hostname} <span className="mx-1 text-border">/</span> {item.device_id.slice(0, 12)}</p></div><span className="shrink-0 font-mono-data text-[10px] text-muted-foreground">{formatRelative(item.timestamp)}</span></Link>)}</div>}
         </Panel>
-        <Panel className="animate-rise-in [animation-delay:280ms]">
-          <PanelHeading eyebrow="Operator note" title="Keep the fleet quiet." />
-          <div className="grid-lines min-h-[204px] p-5"><div className="flex h-full min-h-[164px] flex-col justify-between rounded-md border border-dashed border-accent/40 bg-card/80 p-4"><div><div className="mb-4 flex h-8 w-8 items-center justify-center rounded-md bg-[#fff0cc] text-[#a66c04]"><Activity size={16} /></div><p className="text-[13px] font-semibold leading-5 text-primary">A healthy endpoint is a quiet endpoint.</p><p className="mt-2 text-[11px] leading-5 text-muted-foreground">Use Devices to inspect a machine before an alert becomes a ticket.</p></div><Link href="/devices" className="mt-4 flex items-center gap-1 text-[11px] font-bold text-[#b57504] hover:gap-2 transition-all" data-testid="link-inspect-fleet">Inspect fleet <ArrowUpRight size={13} /></Link></div></div>
-        </Panel>
+        <Panel className="animate-rise-in [animation-delay:280ms]"><PanelHeading eyebrow="Alert lifecycle" title="Active alerts" action={<Link href="/alerts" className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#b57504]">View all <ArrowUpRight size={13} /></Link>} />{alertQuery.data?.recent.length ? <div className="divide-y divide-border">{alertQuery.data.recent.map((alert) => <Link href="/alerts" key={alert.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/45"><AlertPill value={alert.severity} /><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold text-primary">{alertTypeLabel(alert.type)}</p><p className="text-[10px] text-muted-foreground">{alert.device.hostname} · {alert.state}</p></div><span className="font-mono-data text-[10px] text-muted-foreground">{relativeAge(alert.last_triggered_at)}</span></Link>)}</div> : <div className="flex min-h-[204px] items-center justify-center text-[11px] text-muted-foreground">No active alerts</div>}</Panel>
       </div>
     </>}</AppShell>;
+}
+
+function PressurePanel({ title, devices, field }: { title: string; devices: HealthDevice[]; field: 'cpu_percent' | 'ram_percent' | 'disk_percent' }) {
+  return <Panel><PanelHeading eyebrow="Resource pressure" title={title} />{devices.length === 0 ? <div className="p-5 text-[11px] text-muted-foreground">No telemetry available</div> : <div className="divide-y divide-border/60">{devices.map((device) => <Link href={`/devices/${device.id}`} key={device.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/45"><span className={`h-2 w-2 rounded-full ${device.health === 'CRITICAL' ? 'bg-destructive' : device.health === 'WARNING' ? 'bg-accent' : 'bg-[#22a976]'}`} /><span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-primary">{device.hostname}</span><span className="font-mono-data text-[11px] text-muted-foreground">{device[field] == null ? '—' : `${device[field]!.toFixed(1)}%`}</span></Link>)}</div>}</Panel>;
 }
 
 function ActivityIcon({ event }: { event: string }) {

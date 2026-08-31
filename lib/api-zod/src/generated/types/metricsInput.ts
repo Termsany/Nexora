@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { Disk } from './disk';
 
 export interface MetricsInput {
   captured_at: Date;
@@ -29,4 +30,6 @@ export interface MetricsInput {
   disk_percent: number;
   /** @minimum 0 */
   uptime_seconds: number;
+  /** @maxItems 64 */
+  disks?: Disk[];
 }

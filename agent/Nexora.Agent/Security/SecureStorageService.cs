@@ -19,7 +19,7 @@ public sealed class DpapiDataProtector : IDataProtector
     public byte[] Unprotect(byte[] data) => ProtectedData.Unprotect(data, Entropy, DataProtectionScope.LocalMachine);
 }
 
-public sealed record StoredCredentials(string? DeviceId, string? AgentId, string? EnrollmentToken, string? AgentToken = null);
+public sealed record StoredCredentials(string? DeviceId, string? AgentId, string? EnrollmentToken, string? AgentToken = null, string? SigningPrivateKeyPkcs8 = null, string? SigningKeyId = null, string? SigningPublicKey = null);
 
 public sealed class SecureStorageService(IDataProtector protector, string? filePath = null)
 {
