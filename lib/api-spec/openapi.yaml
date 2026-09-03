@@ -16,8 +16,20 @@ tags:
     description: Enrolled endpoint devices
   - name: agents
     description: Agent enrollment and telemetry
+  - name: alerts
+    description: Operational alert lifecycle
   - name: administration
     description: Administrative enrollment-token operations
+  - name: notifications
+    description: Notification delivery history and channel operations
+  - name: software
+    description: Endpoint and fleet software inventory
+  - name: runtime
+    description: Read-only Windows services and processes inventory
+  - name: auth
+    description: Interactive console authentication
+  - name: organizations
+    description: Tenant organizations, sites and memberships
 paths:
   /healthz:
     get:
@@ -32,6 +44,261 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /v1/auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Sign in and receive a session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginInput" }
+      responses:
+        "200":
+          description: Signed in; an httpOnly session cookie is set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthenticatedUser" }
+        "401": { description: Invalid email or password }
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Revoke the current session
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: Session revoked }
+  /v1/auth/me:
+    get:
+      operationId: getCurrentSession
+      tags: [auth]
+      summary: Identity and reachable organizations for the current principal
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      responses:
+        "200":
+          description: Current principal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionIdentity" }
+        "401": { description: Authentication required }
+  /v1/organizations:
+    get:
+      operationId: listOrganizations
+      tags: [organizations]
+      summary: List organizations the caller may reach
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, SUSPENDED, ARCHIVED] }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: Paginated organizations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationList" }
+    post:
+      operationId: createOrganization
+      tags: [organizations]
+      summary: Create an organization
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOrganizationInput" }
+      responses:
+        "201":
+          description: Organization created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+        "403": { description: Insufficient permissions }
+        "409": { description: Slug already in use }
+  /v1/organizations/{organization_id}:
+    get:
+      operationId: getOrganization
+      tags: [organizations]
+      summary: Organization detail with fleet counts
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/OrganizationId" }]
+      responses:
+        "200":
+          description: Organization detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationDetail" }
+        "404": { description: Organization not found }
+    patch:
+      operationId: updateOrganization
+      tags: [organizations]
+      summary: Update an organization, including suspend and archive
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/OrganizationId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateOrganizationInput" }
+      responses:
+        "200":
+          description: Organization updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+        "403": { description: Insufficient permissions }
+        "404": { description: Organization not found }
+  /v1/organizations/{organization_id}/sites:
+    get:
+      operationId: listOrganizationSites
+      tags: [organizations]
+      summary: Sites belonging to an organization
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - name: include_archived
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Sites
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SiteList" }
+        "404": { description: Organization not found }
+    post:
+      operationId: createSite
+      tags: [organizations]
+      summary: Create a site inside an organization
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/OrganizationId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSiteInput" }
+      responses:
+        "201":
+          description: Site created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Site" }
+        "403": { description: Insufficient permissions }
+        "404": { description: Organization not found }
+        "409": { description: Site name already used in this organization }
+  /v1/sites/{site_id}:
+    get:
+      operationId: getSite
+      tags: [organizations]
+      summary: Get a site
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/SiteId" }]
+      responses:
+        "200":
+          description: Site
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Site" }
+        "404": { description: Site not found }
+    patch:
+      operationId: updateSite
+      tags: [organizations]
+      summary: Update or archive a site
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/SiteId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateSiteInput" }
+      responses:
+        "200":
+          description: Site updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Site" }
+        "403": { description: Insufficient permissions }
+        "404": { description: Site not found }
+        "409": { description: Site still has devices assigned }
+  /v1/organizations/{organization_id}/members:
+    get:
+      operationId: listOrganizationMembers
+      tags: [organizations]
+      summary: Members of an organization
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/OrganizationId" }]
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MembershipList" }
+        "403": { description: Insufficient permissions }
+        "404": { description: Organization not found }
+    post:
+      operationId: createOrganizationMember
+      tags: [organizations]
+      summary: Add an existing user to an organization
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/OrganizationId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMembershipInput" }
+      responses:
+        "201":
+          description: Membership created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { description: Insufficient permissions }
+        "404": { description: Organization or user not found }
+        "409": { description: "Already a member, or user is platform-scoped" }
+  /v1/organizations/{organization_id}/members/{user_id}:
+    patch:
+      operationId: updateOrganizationMember
+      tags: [organizations]
+      summary: Change a member's organization role
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMembershipInput" }
+      responses:
+        "200":
+          description: Membership updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Membership" }
+        "403": { description: Insufficient permissions }
+        "404": { description: Membership not found }
+    delete:
+      operationId: deleteOrganizationMember
+      tags: [organizations]
+      summary: Remove a member from an organization
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204": { description: Membership removed }
+        "403": { description: Insufficient permissions }
+        "404": { description: Membership not found }
   /v1/dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -58,6 +325,143 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ActivityEvent"
+  /v1/dashboard/health:
+    get:
+      operationId: getDashboardHealth
+      tags: [dashboard]
+      summary: Get centralized device health and resource pressure
+      responses:
+        "200":
+          description: Current health and top-five resource pressure lists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardHealth"
+  /v1/dashboard/alerts:
+    get:
+      operationId: getDashboardAlerts
+      tags: [dashboard]
+      summary: Get active alert counts and recent alerts
+      responses:
+        "200":
+          description: Active alert summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardAlerts" }
+  /v1/alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List alert incidents
+      parameters:
+        - { name: state, in: query, schema: { $ref: "#/components/schemas/AlertState" } }
+        - { name: severity, in: query, schema: { $ref: "#/components/schemas/AlertSeverity" } }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/AlertType" } }
+        - { name: device_id, in: query, schema: { type: string, format: uuid } }
+        - { name: organization, in: query, schema: { type: string } }
+        - { name: active, in: query, schema: { type: boolean } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: Paginated alerts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertList" }
+        "400": { description: Invalid filters }
+  /v1/alerts/{alert_id}:
+    get:
+      operationId: getAlert
+      tags: [alerts]
+      summary: Get alert detail and timeline
+      parameters:
+        - { name: alert_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Alert detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertDetail" }
+        "404": { description: Alert not found }
+  /v1/alerts/{alert_id}/acknowledge:
+    post:
+      operationId: acknowledgeAlert
+      tags: [alerts]
+      summary: Acknowledge an open alert
+      security: [{ adminBearer: [] }]
+      parameters:
+        - { name: alert_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Alert acknowledged
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Alert" }
+        "401": { description: Administrative authorization required }
+        "409": { description: Resolved alert cannot be acknowledged }
+  /v1/notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notification delivery history
+      security: [{ adminBearer: [] }]
+      parameters:
+        - { name: state, in: query, schema: { $ref: "#/components/schemas/NotificationState" } }
+        - { name: channel, in: query, schema: { $ref: "#/components/schemas/NotificationChannel" } }
+        - { name: event_type, in: query, schema: { $ref: "#/components/schemas/NotificationEventType" } }
+        - { name: alert_id, in: query, schema: { type: string, format: uuid } }
+        - { name: device_id, in: query, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: Paginated notification deliveries
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationList" } } }
+        "401": { description: Administrative authorization required }
+  /v1/notifications/{notification_id}:
+    get:
+      operationId: getNotification
+      tags: [notifications]
+      summary: Get notification delivery detail
+      security: [{ adminBearer: [] }]
+      parameters:
+        - { name: notification_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Notification delivery detail
+          content: { application/json: { schema: { $ref: "#/components/schemas/Notification" } } }
+        "404": { description: Notification not found }
+  /v1/admin/notification-channels:
+    get:
+      operationId: getNotificationChannels
+      tags: [notifications, administration]
+      summary: Get secret-safe channel and worker status
+      security: [{ adminBearer: [] }]
+      responses:
+        "200":
+          description: Channel status
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationChannels" } } }
+  /v1/admin/notification-channels/{channel}/test:
+    post:
+      operationId: testNotificationChannel
+      tags: [notifications, administration]
+      summary: Queue a test notification through the worker
+      security: [{ adminBearer: [] }]
+      parameters:
+        - { name: channel, in: path, required: true, schema: { $ref: "#/components/schemas/NotificationChannel" } }
+      responses:
+        "202":
+          description: Test notification queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, state, channel]
+                properties:
+                  id: { type: string, format: uuid }
+                  state: { $ref: "#/components/schemas/NotificationState" }
+                  channel: { $ref: "#/components/schemas/NotificationChannel" }
+        "409": { description: Channel is not enabled and configured }
   /v1/devices:
     get:
       operationId: listDevices
@@ -86,9 +490,17 @@ paths:
             minimum: 1
             maximum: 100
             default: 25
+        # Narrows the view for a platform user. It can never widen scope: an
+        # organization the caller has no membership in is rejected, not ignored.
+        - name: organization_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: site_id
+          in: query
+          schema: { type: string, format: uuid }
       responses:
         "200":
-          description: Paginated devices
+          description: Paginated devices, restricted to the caller's organizations
           content:
             application/json:
               schema:
@@ -109,6 +521,31 @@ paths:
                 $ref: "#/components/schemas/DeviceDetails"
         "404":
           description: Device not found
+  /v1/devices/{device_id}/site:
+    patch:
+      operationId: setDeviceSite
+      tags: [devices]
+      summary: Assign a device to a site within its own organization
+      description: >
+        The site must belong to the device's organization. Device organization
+        is immutable through the device APIs and cannot be changed here.
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetDeviceSiteInput" }
+      responses:
+        "200":
+          description: Site assignment updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceSiteAssignment" }
+        "403": { description: Insufficient permissions }
+        "404": { description: Device not found }
+        "422": { description: Site does not belong to the device's organization }
   /v1/devices/{device_id}/metrics:
     get:
       operationId: getDeviceMetrics
@@ -116,15 +553,47 @@ paths:
       summary: Get stored device metrics
       parameters:
         - $ref: "#/components/parameters/DeviceId"
+        - name: from
+          in: query
+          description: Inclusive ISO 8601 timestamp; defaults to one hour before `to`.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Inclusive ISO 8601 timestamp; defaults to the current server time.
+          schema: { type: string, format: date-time }
+        - name: resolution
+          in: query
+          schema:
+            type: string
+            enum: [raw, hour, day, auto]
+            default: auto
       responses:
         "200":
           description: Metric history
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Metric"
+                $ref: "#/components/schemas/MetricHistory"
+        "400":
+          description: Invalid or excessive range
+        "404":
+          description: Device not found
+  /v1/devices/{device_id}/monitoring:
+    get:
+      operationId: getDeviceMonitoring
+      tags: [devices]
+      summary: Get current centralized health and downtime state
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          description: Device monitoring state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceMonitoring"
+        "404":
+          description: Device not found
   /v1/agents/enroll:
     post:
       operationId: enrollAgent
@@ -199,6 +668,20 @@ paths:
           description: Metrics accepted
         "401":
           description: Invalid agent credentials
+  /v1/agents/services/snapshot:
+    post:
+      operationId: postServicesSnapshot
+      tags: [agents]
+      security: [{ agentBearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ServicesSnapshotInput" } } } }
+      responses: { "204": { description: Snapshot accepted }, "400": { description: Invalid snapshot }, "401": { description: Invalid agent credentials } }
+  /v1/agents/processes/snapshot:
+    post:
+      operationId: postProcessesSnapshot
+      tags: [agents]
+      security: [{ agentBearer: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProcessesSnapshotInput" } } } }
+      responses: { "204": { description: Snapshot accepted }, "400": { description: Invalid snapshot }, "401": { description: Invalid agent credentials } }
   /v1/admin/enrollment-tokens:
     get:
       operationId: listEnrollmentTokens
@@ -237,6 +720,104 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "204": { description: Token revoked }
+  /v1/devices/{device_id}/software:
+    get:
+      operationId: listDeviceSoftware
+      tags: [software]
+      security: [{ adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: publisher, in: query, schema: { type: string } }
+        - { name: architecture, in: query, schema: { $ref: "#/components/schemas/SoftwareArchitecture" } }
+        - { name: present, in: query, schema: { type: string, enum: ["true", "false", all], default: "true" } }
+        - { name: version, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [name, version, publisher, first_seen, last_seen], default: name } }
+        - { name: direction, in: query, schema: { type: string, enum: [asc, desc], default: asc } }
+      responses:
+        "200": { description: Paginated endpoint software, content: { application/json: { schema: { $ref: "#/components/schemas/DeviceSoftwareList" } } } }
+  /v1/devices/{device_id}/software/changes:
+    get:
+      operationId: listDeviceSoftwareChanges
+      tags: [software]
+      security: [{ adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: change_type, in: query, schema: { $ref: "#/components/schemas/SoftwareChangeType" } }
+      responses:
+        "200": { description: Paginated endpoint software changes, content: { application/json: { schema: { $ref: "#/components/schemas/SoftwareChangeList" } } } }
+  /v1/software:
+    get:
+      operationId: listFleetSoftware
+      tags: [software]
+      security: [{ adminBearer: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: publisher, in: query, schema: { type: string } }
+        - { name: architecture, in: query, schema: { $ref: "#/components/schemas/SoftwareArchitecture" } }
+        - { name: version, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Paginated fleet software aggregation, content: { application/json: { schema: { $ref: "#/components/schemas/FleetSoftwareList" } } } }
+  /v1/software/{software_identity}/devices:
+    get:
+      operationId: listSoftwareDevices
+      tags: [software]
+      security: [{ adminBearer: [] }]
+      parameters:
+        - { name: software_identity, in: path, required: true, schema: { type: string, pattern: "^[a-f0-9]{64}$" } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: version, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Endpoints with the application, content: { application/json: { schema: { $ref: "#/components/schemas/SoftwareDeviceList" } } } }
+  /v1/devices/{device_id}/services:
+    get:
+      operationId: listDeviceServices
+      tags: [runtime]
+      security: [{ adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: startup_type, in: query, schema: { type: string } }
+        - { name: present, in: query, schema: { type: string, enum: ["true", "false", all] } }
+      responses: { "200": { description: Paginated services, content: { application/json: { schema: { $ref: "#/components/schemas/PaginatedInventory" } } } }, "401": { description: Unauthorized }, "404": { description: Device not found } }
+  /v1/devices/{device_id}/service-events:
+    get:
+      operationId: listDeviceServiceEvents
+      tags: [runtime]
+      security: [{ adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/DeviceId" }]
+      responses: { "200": { description: Paginated service events, content: { application/json: { schema: { $ref: "#/components/schemas/PaginatedInventory" } } } } }
+  /v1/devices/{device_id}/processes:
+    get:
+      operationId: listDeviceProcesses
+      tags: [runtime]
+      security: [{ adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: username, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [process_name, cpu_percent, working_set_bytes, started_at] } }
+      responses: { "200": { description: Current processes, content: { application/json: { schema: { $ref: "#/components/schemas/PaginatedInventory" } } } }, "401": { description: Unauthorized }, "404": { description: Device not found } }
+  /v1/devices/{device_id}/processes/summary:
+    get:
+      operationId: getDeviceProcessesSummary
+      tags: [runtime]
+      security: [{ adminBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/DeviceId" }]
+      responses: { "200": { description: Process summary, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
 components:
   parameters:
     DeviceId:
@@ -246,6 +827,21 @@ components:
       schema:
         type: string
         format: uuid
+    OrganizationId:
+      name: organization_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SiteId:
+      name: site_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
   securitySchemes:
     agentBearer:
       type: http
@@ -253,7 +849,219 @@ components:
     adminBearer:
       type: http
       scheme: bearer
+    # Interactive console authentication. Deliberately separate from adminBearer,
+    # which is a platform-level machine credential and is never issued to a tenant.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: nexora_session
   schemas:
+    PlatformRole:
+      type: string
+      enum: [PLATFORM_SUPER_ADMIN, PLATFORM_ADMIN, PLATFORM_TECHNICIAN]
+    OrganizationRole:
+      type: string
+      enum: [ORGANIZATION_ADMIN, ORGANIZATION_TECHNICIAN, ORGANIZATION_VIEWER]
+    OrganizationStatus:
+      type: string
+      enum: [ACTIVE, SUSPENDED, ARCHIVED]
+    SiteStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 1 }
+    AuthenticatedUser:
+      type: object
+      required: [id, email, name, scope]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        name: { type: string }
+        scope: { type: string, enum: [PLATFORM, ORGANIZATION] }
+        platform_role:
+          oneOf:
+            - $ref: "#/components/schemas/PlatformRole"
+            - type: "null"
+    SessionOrganization:
+      type: object
+      required: [id, name, slug, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        status: { $ref: "#/components/schemas/OrganizationStatus" }
+        role:
+          oneOf:
+            - $ref: "#/components/schemas/OrganizationRole"
+            - type: "null"
+    SessionIdentity:
+      type: object
+      required: [authenticated, principal_kind, platform_access, organizations]
+      properties:
+        authenticated: { type: boolean }
+        principal_kind: { type: string, enum: [user, platform-api] }
+        platform_access: { type: boolean }
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/AuthenticatedUser"
+            - type: "null"
+        organizations:
+          type: array
+          items: { $ref: "#/components/schemas/SessionOrganization" }
+    Organization:
+      type: object
+      required: [id, name, slug, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        status: { $ref: "#/components/schemas/OrganizationStatus" }
+        external_reference: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at: { type: [string, "null"], format: date-time }
+    OrganizationSummary:
+      allOf:
+        - $ref: "#/components/schemas/Organization"
+        - type: object
+          required: [site_count, device_count, online_device_count, active_alert_count]
+          properties:
+            site_count: { type: integer }
+            device_count: { type: integer }
+            online_device_count: { type: integer }
+            active_alert_count: { type: integer }
+            last_activity_at: { type: [string, "null"], format: date-time }
+            role:
+              oneOf:
+                - $ref: "#/components/schemas/OrganizationRole"
+                - type: "null"
+    OrganizationDetail:
+      allOf:
+        - $ref: "#/components/schemas/OrganizationSummary"
+        - type: object
+          properties:
+            member_count: { type: integer }
+    OrganizationList:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OrganizationSummary" }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    CreateOrganizationInput:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        slug: { type: string, minLength: 1, maxLength: 120 }
+        external_reference: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+    UpdateOrganizationInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        status: { $ref: "#/components/schemas/OrganizationStatus" }
+        external_reference: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+    Site:
+      type: object
+      required: [id, organization_id, name, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        name: { type: string }
+        code: { type: [string, "null"] }
+        description: { type: [string, "null"] }
+        address: { type: [string, "null"] }
+        city: { type: [string, "null"] }
+        country: { type: [string, "null"] }
+        timezone: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/SiteStatus" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        archived_at: { type: [string, "null"], format: date-time }
+        device_count: { type: integer }
+    SiteList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Site" }
+    CreateSiteInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        code: { type: [string, "null"] }
+        description: { type: [string, "null"] }
+        address: { type: [string, "null"] }
+        city: { type: [string, "null"] }
+        country: { type: [string, "null"] }
+        timezone: { type: [string, "null"] }
+    UpdateSiteInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        code: { type: [string, "null"] }
+        description: { type: [string, "null"] }
+        address: { type: [string, "null"] }
+        city: { type: [string, "null"] }
+        country: { type: [string, "null"] }
+        timezone: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/SiteStatus" }
+    SetDeviceSiteInput:
+      type: object
+      required: [site_id]
+      properties:
+        site_id:
+          oneOf:
+            - { type: string, format: uuid }
+            - type: "null"
+    DeviceSiteAssignment:
+      type: object
+      required: [id, organization_id]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        site_id: { type: [string, "null"], format: uuid }
+    Membership:
+      type: object
+      required: [id, user_id, role]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        email: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        role: { $ref: "#/components/schemas/OrganizationRole" }
+        created_at: { type: string, format: date-time }
+    MembershipList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Membership" }
+    CreateMembershipInput:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id: { type: string, format: uuid }
+        role: { $ref: "#/components/schemas/OrganizationRole" }
+    UpdateMembershipInput:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/OrganizationRole" }
     HealthStatus:
       type: object
       properties:
@@ -283,7 +1091,7 @@ components:
         timestamp: { type: string, format: date-time }
     Device:
       type: object
-      required: [id, agent_id, device_uuid, hostname, status, first_seen_at, created_at, updated_at]
+      required: [id, agent_id, device_uuid, hostname, status, organization_id, first_seen_at, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         agent_id: { type: string }
@@ -298,6 +1106,11 @@ components:
         architecture: { type: ["string", "null"] }
         ip_address: { type: ["string", "null"] }
         agent_version: { type: ["string", "null"] }
+        organization_id: { type: string, format: uuid }
+        organization_name: { type: ["string", "null"] }
+        organization_slug: { type: ["string", "null"] }
+        site_id: { type: ["string", "null"], format: uuid }
+        site_name: { type: ["string", "null"] }
         cpu_percent: { type: ["number", "null"] }
         ram_percent: { type: ["number", "null"] }
         disk_percent: { type: ["number", "null"] }
@@ -371,6 +1184,246 @@ components:
         ram_available_bytes: { type: integer }
         disk_percent: { type: number }
         uptime_seconds: { type: integer }
+    HistoricalMetricPoint:
+      type: object
+      required: [timestamp, cpu_avg, cpu_min, cpu_max, ram_avg, ram_min, ram_max, ram_used_avg_bytes, ram_available_avg_bytes, uptime_seconds, sample_count]
+      properties:
+        timestamp: { type: string, format: date-time }
+        captured_at: { type: string, format: date-time }
+        cpu_avg: { type: number }
+        cpu_min: { type: number }
+        cpu_max: { type: number }
+        ram_avg: { type: number }
+        ram_min: { type: number }
+        ram_max: { type: number }
+        ram_used_avg_bytes: { type: number }
+        ram_available_avg_bytes: { type: number }
+        uptime_seconds: { type: integer }
+        sample_count: { type: integer, minimum: 1 }
+    HistoricalDiskPoint:
+      type: object
+      required: [timestamp, usage_avg, usage_min, usage_max, usage_latest, total_bytes, used_bytes, free_bytes, sample_count]
+      properties:
+        timestamp: { type: string, format: date-time }
+        usage_avg: { type: number }
+        usage_min: { type: number }
+        usage_max: { type: number }
+        usage_latest: { type: number }
+        total_bytes: { type: number }
+        used_bytes: { type: number }
+        free_bytes: { type: number }
+        sample_count: { type: integer, minimum: 1 }
+    HistoricalDiskSeries:
+      type: object
+      required: [volume, points]
+      properties:
+        volume: { type: string }
+        points: { type: array, items: { $ref: "#/components/schemas/HistoricalDiskPoint" } }
+    MetricHistory:
+      type: object
+      required: [resolution, from, to, points, disks]
+      properties:
+        resolution: { type: string, enum: [raw, hour, day] }
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        points: { type: array, items: { $ref: "#/components/schemas/HistoricalMetricPoint" } }
+        disks: { type: array, items: { $ref: "#/components/schemas/HistoricalDiskSeries" } }
+    HealthState:
+      type: string
+      enum: [HEALTHY, WARNING, CRITICAL, OFFLINE, UNKNOWN]
+    DowntimeSummary:
+      type: object
+      required: [last_offline_at, last_recovery_at, last_completed_outage_seconds, ongoing_outage_seconds]
+      properties:
+        last_offline_at: { type: [string, "null"], format: date-time }
+        last_recovery_at: { type: [string, "null"], format: date-time }
+        last_completed_outage_seconds: { type: [number, "null"] }
+        ongoing_outage_seconds: { type: [number, "null"] }
+    DeviceMonitoring:
+      type: object
+      required: [status, health, downtime, activity]
+      properties:
+        status: { type: string, enum: [ONLINE, OFFLINE, UNKNOWN] }
+        health: { $ref: "#/components/schemas/HealthState" }
+        downtime: { $ref: "#/components/schemas/DowntimeSummary" }
+        activity:
+          type: array
+          items:
+            type: object
+            required: [id, event, timestamp]
+            properties:
+              id: { type: string, format: uuid }
+              event: { type: string }
+              timestamp: { type: string, format: date-time }
+    DeviceHealth:
+      type: object
+      required: [id, hostname, status, health, cpu_percent, ram_percent, disk_percent, last_seen_at]
+      properties:
+        id: { type: string, format: uuid }
+        hostname: { type: string }
+        status: { type: string, enum: [ONLINE, OFFLINE, UNKNOWN] }
+        health: { $ref: "#/components/schemas/HealthState" }
+        cpu_percent: { type: [number, "null"] }
+        ram_percent: { type: [number, "null"] }
+        disk_percent: { type: [number, "null"] }
+        last_seen_at: { type: [string, "null"], format: date-time }
+    DashboardHealth:
+      type: object
+      required: [warning_devices, critical_devices, devices, highest_cpu, highest_memory, highest_disk]
+      properties:
+        warning_devices: { type: integer }
+        critical_devices: { type: integer }
+        devices: { type: array, items: { $ref: "#/components/schemas/DeviceHealth" } }
+        highest_cpu: { type: array, maxItems: 5, items: { $ref: "#/components/schemas/DeviceHealth" } }
+        highest_memory: { type: array, maxItems: 5, items: { $ref: "#/components/schemas/DeviceHealth" } }
+        highest_disk: { type: array, maxItems: 5, items: { $ref: "#/components/schemas/DeviceHealth" } }
+    AlertType:
+      type: string
+      enum: [DEVICE_OFFLINE, CPU_HIGH, MEMORY_HIGH, DISK_HIGH]
+    AlertSeverity:
+      type: string
+      enum: [warning, critical]
+    AlertState:
+      type: string
+      enum: [OPEN, ACKNOWLEDGED, RESOLVED]
+    Alert:
+      type: object
+      required: [id, organization, device_id, device, type, severity, state, resource, title, summary, opened_at, last_triggered_at, acknowledged_at, resolved_at, acknowledged_by, trigger_value, threshold_value, occurrence_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        organization: { type: string }
+        device_id: { type: string, format: uuid }
+        device:
+          type: object
+          required: [id, hostname]
+          properties:
+            id: { type: string, format: uuid }
+            hostname: { type: string }
+            last_seen_at: { type: [string, "null"], format: date-time }
+        type: { $ref: "#/components/schemas/AlertType" }
+        severity: { $ref: "#/components/schemas/AlertSeverity" }
+        state: { $ref: "#/components/schemas/AlertState" }
+        resource: { type: [string, "null"] }
+        title: { type: string }
+        summary: { type: string }
+        opened_at: { type: string, format: date-time }
+        last_triggered_at: { type: string, format: date-time }
+        acknowledged_at: { type: [string, "null"], format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        acknowledged_by: { type: [string, "null"] }
+        trigger_value: { type: [number, "null"] }
+        threshold_value: { type: [number, "null"] }
+        occurrence_count: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    AlertEvent:
+      type: object
+      required: [id, event_type, previous_state, new_state, previous_severity, new_severity, actor, timestamp, metadata]
+      properties:
+        id: { type: string, format: uuid }
+        event_type: { type: string, enum: [CREATED, SEVERITY_CHANGED, ACKNOWLEDGED, RESOLVED] }
+        previous_state: { oneOf: [{ $ref: "#/components/schemas/AlertState" }, { type: "null" }] }
+        new_state: { oneOf: [{ $ref: "#/components/schemas/AlertState" }, { type: "null" }] }
+        previous_severity: { oneOf: [{ $ref: "#/components/schemas/AlertSeverity" }, { type: "null" }] }
+        new_severity: { oneOf: [{ $ref: "#/components/schemas/AlertSeverity" }, { type: "null" }] }
+        actor: { type: [string, "null"] }
+        timestamp: { type: string, format: date-time }
+        metadata: { type: [object, "null"], additionalProperties: true }
+    AlertDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Alert" }
+        - type: object
+          required: [events]
+          properties:
+            events: { type: array, items: { $ref: "#/components/schemas/AlertEvent" } }
+    AlertList:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Alert" } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    DashboardAlerts:
+      type: object
+      required: [active_alerts, critical_alerts, warning_alerts, recent]
+      properties:
+        active_alerts: { type: integer }
+        critical_alerts: { type: integer }
+        warning_alerts: { type: integer }
+        recent: { type: array, maxItems: 5, items: { $ref: "#/components/schemas/Alert" } }
+    NotificationChannel:
+      type: string
+      enum: [telegram, email, webhook]
+    NotificationEventType:
+      type: string
+      enum: [ALERT_CREATED, ALERT_ESCALATED, ALERT_ACKNOWLEDGED, ALERT_RESOLVED, TEST]
+    NotificationState:
+      type: string
+      enum: [PENDING, PROCESSING, SENT, RETRY, FAILED, CANCELLED]
+    Notification:
+      type: object
+      required: [id, organization, alert_id, alert_event_id, channel, destination, event_type, severity, state, attempt_count, max_attempts, next_attempt_at, last_attempt_at, sent_at, failed_at, last_error_code, last_error_message, created_at, updated_at, device]
+      properties:
+        id: { type: string, format: uuid }
+        organization: { type: string }
+        alert_id: { type: [string, "null"], format: uuid }
+        alert_event_id: { type: [string, "null"], format: uuid }
+        channel: { $ref: "#/components/schemas/NotificationChannel" }
+        destination: { type: string }
+        event_type: { $ref: "#/components/schemas/NotificationEventType" }
+        severity: { oneOf: [{ $ref: "#/components/schemas/AlertSeverity" }, { type: "null" }] }
+        state: { $ref: "#/components/schemas/NotificationState" }
+        attempt_count: { type: integer }
+        max_attempts: { type: integer }
+        next_attempt_at: { type: string, format: date-time }
+        last_attempt_at: { type: [string, "null"], format: date-time }
+        sent_at: { type: [string, "null"], format: date-time }
+        failed_at: { type: [string, "null"], format: date-time }
+        last_error_code: { type: [string, "null"] }
+        last_error_message: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        device:
+          oneOf:
+            - type: object
+              required: [hostname]
+              properties: { hostname: { type: [string, "null"] } }
+            - { type: "null" }
+    NotificationList:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    NotificationChannels:
+      type: object
+      required: [channels, worker, queue]
+      properties:
+        channels:
+          type: array
+          items:
+            type: object
+            required: [channel, enabled, configured, destination]
+            properties:
+              channel: { $ref: "#/components/schemas/NotificationChannel" }
+              enabled: { type: boolean }
+              configured: { type: boolean }
+              destination: { type: [string, "null"] }
+        worker:
+          type: object
+          required: [healthy, last_seen_at]
+          properties:
+            healthy: { type: boolean }
+            last_seen_at: { type: [string, "null"], format: date-time }
+        queue:
+          type: object
+          required: [pending, failed]
+          properties:
+            pending: { type: integer }
+            failed: { type: integer }
     EnrollmentInput:
       type: object
       required: [enrollment_token, device_uuid, hostname, machine_guid_hash, agent_version]
@@ -410,6 +1463,127 @@ components:
         hardware: { type: object, additionalProperties: true }
         disks: { type: array, items: { type: object, additionalProperties: true } }
         network: { type: array, items: { type: object, additionalProperties: true } }
+        software:
+          $ref: "#/components/schemas/SoftwareSnapshotInput"
+    SoftwareArchitecture:
+      type: string
+      enum: [x64, x86, unknown]
+    SoftwareChangeType:
+      type: string
+      enum: [INSTALLED, REMOVED, VERSION_CHANGED]
+    SoftwareSnapshotInput:
+      type: object
+      required: [complete, collected_at, entries]
+      properties:
+        complete: { type: boolean }
+        collected_at: { type: string, format: date-time }
+        error_code: { type: [string, "null"] }
+        entries:
+          type: array
+          maxItems: 5000
+          items:
+            type: object
+            required: [name, uninstall_available, architecture, source, system_component, identity]
+            properties:
+              name: { type: string }
+              version: { type: [string, "null"] }
+              publisher: { type: [string, "null"] }
+              install_date: { type: [string, "null"], format: date-time }
+              install_location: { type: [string, "null"] }
+              uninstall_available: { type: boolean }
+              product_code: { type: [string, "null"] }
+              architecture: { $ref: "#/components/schemas/SoftwareArchitecture" }
+              source: { type: string, enum: [windows_registry] }
+              system_component: { type: boolean }
+              identity: { type: string }
+    DeviceSoftwareList:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { type: object, additionalProperties: true } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    SoftwareChangeList:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { type: object, additionalProperties: true } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    FleetSoftwareList:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { type: object, additionalProperties: true } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    SoftwareDeviceList:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { type: object, additionalProperties: true } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+    SnapshotMetadata:
+      type: object
+      required: [snapshot_id, collected_at, collection_status, item_count, agent_version]
+      properties:
+        snapshot_id: { type: string, format: uuid }
+        collected_at: { type: string, format: date-time }
+        collection_status: { type: string, enum: [complete, partial, failed] }
+        item_count: { type: integer, minimum: 0 }
+        agent_version: { type: string, maxLength: 50 }
+    ServicesSnapshotInput:
+      allOf:
+        - $ref: "#/components/schemas/SnapshotMetadata"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              maxItems: 5000
+              items:
+                type: object
+                required: [service_name, display_name, status, startup_type]
+                properties:
+                  service_name: { type: string, maxLength: 256 }
+                  display_name: { type: string, maxLength: 512 }
+                  status: { type: string }
+                  startup_type: { type: string }
+                  logon_as: { type: [string, "null"], maxLength: 512 }
+                  process_id: { type: [integer, "null"], minimum: 1 }
+    ProcessesSnapshotInput:
+      allOf:
+        - $ref: "#/components/schemas/SnapshotMetadata"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              maxItems: 10000
+              items:
+                type: object
+                required: [pid, process_name, cpu_time_seconds, working_set_bytes, started_at, architecture]
+                properties:
+                  pid: { type: integer, minimum: 1 }
+                  process_name: { type: string, maxLength: 512 }
+                  cpu_time_seconds: { type: number, minimum: 0 }
+                  cpu_percent: { type: [number, "null"], minimum: 0, maximum: 100 }
+                  working_set_bytes: { type: integer, minimum: 0 }
+                  started_at: { type: string, format: date-time }
+                  architecture: { type: string, enum: [x64, x86, arm64, unknown] }
+    PaginatedInventory:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { type: object, additionalProperties: true } }
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
     MetricsInput:
       type: object
       required: [captured_at, cpu_percent, ram_percent, ram_used_bytes, ram_available_bytes, disk_percent, uptime_seconds]
@@ -421,13 +1595,20 @@ components:
         ram_available_bytes: { type: integer, minimum: 0 }
         disk_percent: { type: number, minimum: 0, maximum: 100 }
         uptime_seconds: { type: integer, minimum: 0 }
+        disks:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/Disk" }
     EnrollmentToken:
       type: object
-      required: [id, name, organization, expires_at, max_uses, current_uses, created_at, active]
+      required: [id, name, organization_id, expires_at, max_uses, current_uses, created_at, active]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
-        organization: { type: string }
+        organization_id: { type: string, format: uuid }
+        organization_name: { type: [string, "null"] }
+        site_id: { type: [string, "null"], format: uuid }
+        site_name: { type: [string, "null"] }
         expires_at: { type: string, format: date-time }
         max_uses: { type: integer }
         current_uses: { type: integer }
@@ -436,10 +1617,13 @@ components:
         active: { type: boolean }
     CreateEnrollmentTokenInput:
       type: object
-      required: [name, organization, expires_at, max_uses]
+      # organization_id is mandatory: every enrollment token is tenant-scoped and
+      # the server assigns the enrolling device to this organization.
+      required: [name, organization_id, expires_at, max_uses]
       properties:
         name: { type: string, minLength: 1 }
-        organization: { type: string, minLength: 1 }
+        organization_id: { type: string, format: uuid }
+        site_id: { type: [string, "null"], format: uuid }
         expires_at: { type: string, format: date-time }
         max_uses: { type: integer, minimum: 1, maximum: 10000 }
     CreatedEnrollmentToken:

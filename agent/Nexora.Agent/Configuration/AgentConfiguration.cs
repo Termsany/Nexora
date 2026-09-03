@@ -25,6 +25,8 @@ public static class AgentConfiguration
             ReadInt("NEXORA_HEARTBEAT_INTERVAL_SECONDS", file?.HeartbeatIntervalSeconds ?? 30),
             ReadInt("NEXORA_METRICS_INTERVAL_SECONDS", file?.MetricsIntervalSeconds ?? 30),
             ReadInt("NEXORA_INVENTORY_INTERVAL_HOURS", file?.InventoryIntervalHours ?? 6),
+            ReadInt("NEXORA_SERVICES_INTERVAL_SECONDS", file?.ServicesIntervalSeconds ?? 300),
+            ReadInt("NEXORA_PROCESSES_INTERVAL_SECONDS", file?.ProcessesIntervalSeconds ?? 60),
             ReadInt("NEXORA_REQUEST_TIMEOUT_SECONDS", file?.RequestTimeoutSeconds ?? 30));
     }
 

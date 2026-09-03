@@ -15,7 +15,11 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
+    entryPoints: {
+      index: path.resolve(artifactDir, "src/index.ts"),
+      maintenance: path.resolve(artifactDir, "src/maintenance.ts"),
+      notifications: path.resolve(artifactDir, "src/notification-worker.ts"),
+    },
     platform: "node",
     bundle: true,
     format: "esm",
@@ -49,7 +53,6 @@ async function buildAll() {
       "pg-native",
       "oracledb",
       "mongodb-client-encryption",
-      "nodemailer",
       "handlebars",
       "knex",
       "typeorm",

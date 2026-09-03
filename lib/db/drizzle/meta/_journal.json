@@ -15,6 +15,83 @@
       "when": 1787257179581,
       "tag": "0001_agent_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787285644769,
+      "tag": "0002_wooden_catseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787287454638,
+      "tag": "0003_windy_harpoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787294764736,
+      "tag": "0004_familiar_captain_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787325617065,
+      "tag": "0005_fearless_wiccan",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787380597058,
+      "tag": "0006_puzzling_human_robot",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788047212637,
+      "tag": "0007_blushing_supreme_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788052214178,
+      "tag": "0008_task008_tenancy",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788117600000,
+      "tag": "0009_task009_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788200000000,
+      "tag": "0010_remote_commands",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788201000000,
+      "tag": "0011_agent_signing",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788202000000,
+      "tag": "0012_agent_nonces",
+      "breakpoints": true
     }
   ]
 }

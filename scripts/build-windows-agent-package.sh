@@ -82,10 +82,16 @@ https://nexora.design.local
 
 opens without a certificate warning.
 
-4. Obtain a valid Enrollment Token from:
+4. Upgrade an existing Nexora Agent (identity and protected credentials are preserved):
+
+.\install-agent.ps1 \`
+  -ApiBaseUrl "https://nexora.design.local/api" \`
+  -SourcePath "<PACKAGE-DIRECTORY>"
+
+5. For a fresh installation, obtain a valid Enrollment Token from:
 Nexora -> Administration -> Enrollment Tokens
 
-5. Install:
+Then install:
 
 .\install-agent.ps1 \`
   -ApiBaseUrl "https://nexora.design.local/api" \`

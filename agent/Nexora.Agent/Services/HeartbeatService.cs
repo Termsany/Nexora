@@ -14,7 +14,7 @@ public sealed class HeartbeatService(NexoraApiClient api, AgentOptions options, 
             TimeSpan delay;
             try
             {
-                await api.SendHeartbeatAsync(token, new HeartbeatPayload(AgentVersion.Current, user.UptimeSeconds, user.CurrentUser, DateTimeOffset.UtcNow), cancellationToken);
+                await api.SendHeartbeatAsync(token, new HeartbeatPayload(AgentVersion.Current, user.UptimeSeconds, user.CurrentUser, DateTimeOffset.UtcNow, ["remote_command_v1"]), cancellationToken);
                 logger.LogDebug("HeartbeatSucceeded");
                 attempt = 0;
                 delay = TimeSpan.FromSeconds(options.HeartbeatIntervalSeconds);

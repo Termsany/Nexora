@@ -1,0 +1,2 @@
+CREATE INDEX "nexora_disk_metrics_received_idx" ON "nexora_disk_metrics" USING btree ("received_at");--> statement-breakpoint
+CREATE INDEX "nexora_metrics_received_idx" ON "nexora_device_metrics" USING btree ("received_at");

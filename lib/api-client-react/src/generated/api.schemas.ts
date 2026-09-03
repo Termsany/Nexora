@@ -5,6 +5,264 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type PlatformRole = typeof PlatformRole[keyof typeof PlatformRole];
+
+
+export const PlatformRole = {
+  PLATFORM_SUPER_ADMIN: 'PLATFORM_SUPER_ADMIN',
+  PLATFORM_ADMIN: 'PLATFORM_ADMIN',
+  PLATFORM_TECHNICIAN: 'PLATFORM_TECHNICIAN',
+} as const;
+
+export type OrganizationRole = typeof OrganizationRole[keyof typeof OrganizationRole];
+
+
+export const OrganizationRole = {
+  ORGANIZATION_ADMIN: 'ORGANIZATION_ADMIN',
+  ORGANIZATION_TECHNICIAN: 'ORGANIZATION_TECHNICIAN',
+  ORGANIZATION_VIEWER: 'ORGANIZATION_VIEWER',
+} as const;
+
+export type OrganizationStatus = typeof OrganizationStatus[keyof typeof OrganizationStatus];
+
+
+export const OrganizationStatus = {
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  ARCHIVED: 'ARCHIVED',
+} as const;
+
+export type SiteStatus = typeof SiteStatus[keyof typeof SiteStatus];
+
+
+export const SiteStatus = {
+  ACTIVE: 'ACTIVE',
+  ARCHIVED: 'ARCHIVED',
+} as const;
+
+export interface LoginInput {
+  email: string;
+  /** @minLength 1 */
+  password: string;
+}
+
+export type AuthenticatedUserScope = typeof AuthenticatedUserScope[keyof typeof AuthenticatedUserScope];
+
+
+export const AuthenticatedUserScope = {
+  PLATFORM: 'PLATFORM',
+  ORGANIZATION: 'ORGANIZATION',
+} as const;
+
+export interface AuthenticatedUser {
+  id: string;
+  email: string;
+  name: string;
+  scope: AuthenticatedUserScope;
+  platform_role?: PlatformRole | null;
+}
+
+export interface SessionOrganization {
+  id: string;
+  name: string;
+  slug: string;
+  status: OrganizationStatus;
+  role?: OrganizationRole | null;
+}
+
+export type SessionIdentityPrincipalKind = typeof SessionIdentityPrincipalKind[keyof typeof SessionIdentityPrincipalKind];
+
+
+export const SessionIdentityPrincipalKind = {
+  user: 'user',
+  'platform-api': 'platform-api',
+} as const;
+
+export interface SessionIdentity {
+  authenticated: boolean;
+  principal_kind: SessionIdentityPrincipalKind;
+  platform_access: boolean;
+  user?: AuthenticatedUser | null;
+  organizations: SessionOrganization[];
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  status: OrganizationStatus;
+  /** @nullable */
+  external_reference?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  /** @nullable */
+  archived_at?: string | null;
+}
+
+export type OrganizationSummary = Organization & ({
+  site_count: number;
+  device_count: number;
+  online_device_count: number;
+  active_alert_count: number;
+  /** @nullable */
+  last_activity_at?: string | null;
+  role?: OrganizationRole | null;
+});
+
+export type OrganizationDetail = OrganizationSummary & {
+  member_count?: number;
+};
+
+export interface OrganizationList {
+  items: OrganizationSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface CreateOrganizationInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  slug: string;
+  /** @nullable */
+  external_reference?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface UpdateOrganizationInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name?: string;
+  status?: OrganizationStatus;
+  /** @nullable */
+  external_reference?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface Site {
+  id: string;
+  organization_id: string;
+  name: string;
+  /** @nullable */
+  code?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  timezone?: string | null;
+  status: SiteStatus;
+  created_at: string;
+  updated_at: string;
+  /** @nullable */
+  archived_at?: string | null;
+  device_count?: number;
+}
+
+export interface SiteList {
+  items: Site[];
+}
+
+export interface CreateSiteInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  /** @nullable */
+  code?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  timezone?: string | null;
+}
+
+export interface UpdateSiteInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name?: string;
+  /** @nullable */
+  code?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  country?: string | null;
+  /** @nullable */
+  timezone?: string | null;
+  status?: SiteStatus;
+}
+
+export interface SetDeviceSiteInput {
+  site_id: string | null;
+}
+
+export interface DeviceSiteAssignment {
+  id: string;
+  organization_id: string;
+  /** @nullable */
+  site_id?: string | null;
+}
+
+export type MembershipStatus = typeof MembershipStatus[keyof typeof MembershipStatus];
+
+
+export const MembershipStatus = {
+  ACTIVE: 'ACTIVE',
+  DISABLED: 'DISABLED',
+} as const;
+
+export interface Membership {
+  id: string;
+  user_id: string;
+  email?: string;
+  name?: string;
+  status?: MembershipStatus;
+  role: OrganizationRole;
+  created_at?: string;
+}
+
+export interface MembershipList {
+  items: Membership[];
+}
+
+export interface CreateMembershipInput {
+  user_id: string;
+  role: OrganizationRole;
+}
+
+export interface UpdateMembershipInput {
+  role: OrganizationRole;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -58,6 +316,15 @@ export interface Device {
   ip_address?: string | null;
   /** @nullable */
   agent_version?: string | null;
+  organization_id: string;
+  /** @nullable */
+  organization_name?: string | null;
+  /** @nullable */
+  organization_slug?: string | null;
+  /** @nullable */
+  site_id?: string | null;
+  /** @nullable */
+  site_name?: string | null;
   /** @nullable */
   cpu_percent?: number | null;
   /** @nullable */
@@ -130,13 +397,355 @@ export interface Metric {
   uptime_seconds: number;
 }
 
+export interface HistoricalMetricPoint {
+  timestamp: string;
+  captured_at?: string;
+  cpu_avg: number;
+  cpu_min: number;
+  cpu_max: number;
+  ram_avg: number;
+  ram_min: number;
+  ram_max: number;
+  ram_used_avg_bytes: number;
+  ram_available_avg_bytes: number;
+  uptime_seconds: number;
+  /** @minimum 1 */
+  sample_count: number;
+}
+
+export interface HistoricalDiskPoint {
+  timestamp: string;
+  usage_avg: number;
+  usage_min: number;
+  usage_max: number;
+  usage_latest: number;
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  /** @minimum 1 */
+  sample_count: number;
+}
+
+export interface HistoricalDiskSeries {
+  volume: string;
+  points: HistoricalDiskPoint[];
+}
+
+export type MetricHistoryResolution = typeof MetricHistoryResolution[keyof typeof MetricHistoryResolution];
+
+
+export const MetricHistoryResolution = {
+  raw: 'raw',
+  hour: 'hour',
+  day: 'day',
+} as const;
+
+export interface MetricHistory {
+  resolution: MetricHistoryResolution;
+  from: string;
+  to: string;
+  points: HistoricalMetricPoint[];
+  disks: HistoricalDiskSeries[];
+}
+
+export type HealthState = typeof HealthState[keyof typeof HealthState];
+
+
+export const HealthState = {
+  HEALTHY: 'HEALTHY',
+  WARNING: 'WARNING',
+  CRITICAL: 'CRITICAL',
+  OFFLINE: 'OFFLINE',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+export interface DowntimeSummary {
+  /** @nullable */
+  last_offline_at: string | null;
+  /** @nullable */
+  last_recovery_at: string | null;
+  /** @nullable */
+  last_completed_outage_seconds: number | null;
+  /** @nullable */
+  ongoing_outage_seconds: number | null;
+}
+
+export type DeviceMonitoringStatus = typeof DeviceMonitoringStatus[keyof typeof DeviceMonitoringStatus];
+
+
+export const DeviceMonitoringStatus = {
+  ONLINE: 'ONLINE',
+  OFFLINE: 'OFFLINE',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+export type DeviceMonitoringActivityItem = {
+  id: string;
+  event: string;
+  timestamp: string;
+};
+
+export interface DeviceMonitoring {
+  status: DeviceMonitoringStatus;
+  health: HealthState;
+  downtime: DowntimeSummary;
+  activity: DeviceMonitoringActivityItem[];
+}
+
+export type DeviceHealthStatus = typeof DeviceHealthStatus[keyof typeof DeviceHealthStatus];
+
+
+export const DeviceHealthStatus = {
+  ONLINE: 'ONLINE',
+  OFFLINE: 'OFFLINE',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+export interface DeviceHealth {
+  id: string;
+  hostname: string;
+  status: DeviceHealthStatus;
+  health: HealthState;
+  /** @nullable */
+  cpu_percent: number | null;
+  /** @nullable */
+  ram_percent: number | null;
+  /** @nullable */
+  disk_percent: number | null;
+  /** @nullable */
+  last_seen_at: string | null;
+}
+
+export interface DashboardHealth {
+  warning_devices: number;
+  critical_devices: number;
+  devices: DeviceHealth[];
+  /** @maxItems 5 */
+  highest_cpu: DeviceHealth[];
+  /** @maxItems 5 */
+  highest_memory: DeviceHealth[];
+  /** @maxItems 5 */
+  highest_disk: DeviceHealth[];
+}
+
+export type AlertType = typeof AlertType[keyof typeof AlertType];
+
+
+export const AlertType = {
+  DEVICE_OFFLINE: 'DEVICE_OFFLINE',
+  CPU_HIGH: 'CPU_HIGH',
+  MEMORY_HIGH: 'MEMORY_HIGH',
+  DISK_HIGH: 'DISK_HIGH',
+} as const;
+
+export type AlertSeverity = typeof AlertSeverity[keyof typeof AlertSeverity];
+
+
+export const AlertSeverity = {
+  warning: 'warning',
+  critical: 'critical',
+} as const;
+
+export type AlertState = typeof AlertState[keyof typeof AlertState];
+
+
+export const AlertState = {
+  OPEN: 'OPEN',
+  ACKNOWLEDGED: 'ACKNOWLEDGED',
+  RESOLVED: 'RESOLVED',
+} as const;
+
+export type AlertDevice = {
+  id: string;
+  hostname: string;
+  /** @nullable */
+  last_seen_at?: string | null;
+};
+
+export interface Alert {
+  id: string;
+  organization: string;
+  device_id: string;
+  device: AlertDevice;
+  type: AlertType;
+  severity: AlertSeverity;
+  state: AlertState;
+  /** @nullable */
+  resource: string | null;
+  title: string;
+  summary: string;
+  opened_at: string;
+  last_triggered_at: string;
+  /** @nullable */
+  acknowledged_at: string | null;
+  /** @nullable */
+  resolved_at: string | null;
+  /** @nullable */
+  acknowledged_by: string | null;
+  /** @nullable */
+  trigger_value: number | null;
+  /** @nullable */
+  threshold_value: number | null;
+  /** @minimum 1 */
+  occurrence_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AlertEventEventType = typeof AlertEventEventType[keyof typeof AlertEventEventType];
+
+
+export const AlertEventEventType = {
+  CREATED: 'CREATED',
+  SEVERITY_CHANGED: 'SEVERITY_CHANGED',
+  ACKNOWLEDGED: 'ACKNOWLEDGED',
+  RESOLVED: 'RESOLVED',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AlertEventMetadata = { [key: string]: unknown } | null;
+
+export interface AlertEvent {
+  id: string;
+  event_type: AlertEventEventType;
+  previous_state: AlertState | null;
+  new_state: AlertState | null;
+  previous_severity: AlertSeverity | null;
+  new_severity: AlertSeverity | null;
+  /** @nullable */
+  actor: string | null;
+  timestamp: string;
+  /** @nullable */
+  metadata: AlertEventMetadata;
+}
+
+export type AlertDetail = Alert & {
+  events: AlertEvent[];
+};
+
+export interface AlertList {
+  items: Alert[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface DashboardAlerts {
+  active_alerts: number;
+  critical_alerts: number;
+  warning_alerts: number;
+  /** @maxItems 5 */
+  recent: Alert[];
+}
+
+export type NotificationChannel = typeof NotificationChannel[keyof typeof NotificationChannel];
+
+
+export const NotificationChannel = {
+  telegram: 'telegram',
+  email: 'email',
+  webhook: 'webhook',
+} as const;
+
+export type NotificationEventType = typeof NotificationEventType[keyof typeof NotificationEventType];
+
+
+export const NotificationEventType = {
+  ALERT_CREATED: 'ALERT_CREATED',
+  ALERT_ESCALATED: 'ALERT_ESCALATED',
+  ALERT_ACKNOWLEDGED: 'ALERT_ACKNOWLEDGED',
+  ALERT_RESOLVED: 'ALERT_RESOLVED',
+  TEST: 'TEST',
+} as const;
+
+export type NotificationState = typeof NotificationState[keyof typeof NotificationState];
+
+
+export const NotificationState = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  SENT: 'SENT',
+  RETRY: 'RETRY',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+export type NotificationDevice = {
+  /** @nullable */
+  hostname: string | null;
+} | null;
+
+export interface Notification {
+  id: string;
+  organization: string;
+  /** @nullable */
+  alert_id: string | null;
+  /** @nullable */
+  alert_event_id: string | null;
+  channel: NotificationChannel;
+  destination: string;
+  event_type: NotificationEventType;
+  severity: AlertSeverity | null;
+  state: NotificationState;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at: string;
+  /** @nullable */
+  last_attempt_at: string | null;
+  /** @nullable */
+  sent_at: string | null;
+  /** @nullable */
+  failed_at: string | null;
+  /** @nullable */
+  last_error_code: string | null;
+  /** @nullable */
+  last_error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  device: NotificationDevice;
+}
+
+export interface NotificationList {
+  items: Notification[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export type NotificationChannelsChannelsItem = {
+  channel: NotificationChannel;
+  enabled: boolean;
+  configured: boolean;
+  /** @nullable */
+  destination: string | null;
+};
+
+export type NotificationChannelsWorker = {
+  healthy: boolean;
+  /** @nullable */
+  last_seen_at: string | null;
+};
+
+export type NotificationChannelsQueue = {
+  pending: number;
+  failed: number;
+};
+
+export interface NotificationChannels {
+  channels: NotificationChannelsChannelsItem[];
+  worker: NotificationChannelsWorker;
+  queue: NotificationChannelsQueue;
+}
+
 export interface EnrollmentInput {
   /** @minLength 1 */
   enrollment_token: string;
   device_uuid: string;
   /** @minLength 1 */
   hostname: string;
-  /** @minLength 1 */
+  /** @pattern ^[a-fA-F0-9]{64}$ */
   machine_guid_hash: string;
   /** @minLength 1 */
   agent_version: string;
@@ -167,6 +776,50 @@ export type InventoryInputDisksItem = { [key: string]: unknown };
 
 export type InventoryInputNetworkItem = { [key: string]: unknown };
 
+export type SoftwareArchitecture = typeof SoftwareArchitecture[keyof typeof SoftwareArchitecture];
+
+
+export const SoftwareArchitecture = {
+  x64: 'x64',
+  x86: 'x86',
+  unknown: 'unknown',
+} as const;
+
+export type SoftwareSnapshotInputEntriesItemSource = typeof SoftwareSnapshotInputEntriesItemSource[keyof typeof SoftwareSnapshotInputEntriesItemSource];
+
+
+export const SoftwareSnapshotInputEntriesItemSource = {
+  windows_registry: 'windows_registry',
+} as const;
+
+export type SoftwareSnapshotInputEntriesItem = {
+  name: string;
+  /** @nullable */
+  version?: string | null;
+  /** @nullable */
+  publisher?: string | null;
+  /** @nullable */
+  install_date?: string | null;
+  /** @nullable */
+  install_location?: string | null;
+  uninstall_available: boolean;
+  /** @nullable */
+  product_code?: string | null;
+  architecture: SoftwareArchitecture;
+  source: SoftwareSnapshotInputEntriesItemSource;
+  system_component: boolean;
+  identity: string;
+};
+
+export interface SoftwareSnapshotInput {
+  complete: boolean;
+  collected_at: string;
+  /** @nullable */
+  error_code?: string | null;
+  /** @maxItems 5000 */
+  entries: SoftwareSnapshotInputEntriesItem[];
+}
+
 export interface InventoryInput {
   hostname: string;
   device_uuid: string;
@@ -179,6 +832,138 @@ export interface InventoryInput {
   hardware: InventoryInputHardware;
   disks: InventoryInputDisksItem[];
   network: InventoryInputNetworkItem[];
+  software?: SoftwareSnapshotInput;
+}
+
+export type SoftwareChangeType = typeof SoftwareChangeType[keyof typeof SoftwareChangeType];
+
+
+export const SoftwareChangeType = {
+  INSTALLED: 'INSTALLED',
+  REMOVED: 'REMOVED',
+  VERSION_CHANGED: 'VERSION_CHANGED',
+} as const;
+
+export type DeviceSoftwareListItemsItem = { [key: string]: unknown };
+
+export interface DeviceSoftwareList {
+  items: DeviceSoftwareListItemsItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export type SoftwareChangeListItemsItem = { [key: string]: unknown };
+
+export interface SoftwareChangeList {
+  items: SoftwareChangeListItemsItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export type FleetSoftwareListItemsItem = { [key: string]: unknown };
+
+export interface FleetSoftwareList {
+  items: FleetSoftwareListItemsItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export type SoftwareDeviceListItemsItem = { [key: string]: unknown };
+
+export interface SoftwareDeviceList {
+  items: SoftwareDeviceListItemsItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export type SnapshotMetadataCollectionStatus = typeof SnapshotMetadataCollectionStatus[keyof typeof SnapshotMetadataCollectionStatus];
+
+
+export const SnapshotMetadataCollectionStatus = {
+  complete: 'complete',
+  partial: 'partial',
+  failed: 'failed',
+} as const;
+
+export interface SnapshotMetadata {
+  snapshot_id: string;
+  collected_at: string;
+  collection_status: SnapshotMetadataCollectionStatus;
+  /** @minimum 0 */
+  item_count: number;
+  /** @maxLength 50 */
+  agent_version: string;
+}
+
+export type ServicesSnapshotInputItemsItem = {
+  /** @maxLength 256 */
+  service_name: string;
+  /** @maxLength 512 */
+  display_name: string;
+  status: string;
+  startup_type: string;
+  /**
+     * @maxLength 512
+     * @nullable
+     */
+  logon_as?: string | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  process_id?: number | null;
+};
+
+export type ServicesSnapshotInput = SnapshotMetadata & {
+  /** @maxItems 5000 */
+  items: ServicesSnapshotInputItemsItem[];
+};
+
+export type ProcessesSnapshotInputItemsItemArchitecture = typeof ProcessesSnapshotInputItemsItemArchitecture[keyof typeof ProcessesSnapshotInputItemsItemArchitecture];
+
+
+export const ProcessesSnapshotInputItemsItemArchitecture = {
+  x64: 'x64',
+  x86: 'x86',
+  arm64: 'arm64',
+  unknown: 'unknown',
+} as const;
+
+export type ProcessesSnapshotInputItemsItem = {
+  /** @minimum 1 */
+  pid: number;
+  /** @maxLength 512 */
+  process_name: string;
+  /** @minimum 0 */
+  cpu_time_seconds: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  cpu_percent?: number | null;
+  /** @minimum 0 */
+  working_set_bytes: number;
+  started_at: string;
+  architecture: ProcessesSnapshotInputItemsItemArchitecture;
+};
+
+export type ProcessesSnapshotInput = SnapshotMetadata & {
+  /** @maxItems 10000 */
+  items: ProcessesSnapshotInputItemsItem[];
+};
+
+export type PaginatedInventoryItemsItem = { [key: string]: unknown };
+
+export interface PaginatedInventory {
+  items: PaginatedInventoryItemsItem[];
+  page: number;
+  page_size: number;
+  total: number;
 }
 
 export interface MetricsInput {
@@ -204,7 +989,114 @@ export interface MetricsInput {
   disk_percent: number;
   /** @minimum 0 */
   uptime_seconds: number;
+  /** @maxItems 64 */
+  disks?: Disk[];
 }
+
+export interface EnrollmentToken {
+  id: string;
+  name: string;
+  organization_id: string;
+  /** @nullable */
+  organization_name?: string | null;
+  /** @nullable */
+  site_id?: string | null;
+  /** @nullable */
+  site_name?: string | null;
+  expires_at: string;
+  max_uses: number;
+  current_uses: number;
+  created_at: string;
+  /** @nullable */
+  revoked_at?: string | null;
+  active: boolean;
+}
+
+export interface CreateEnrollmentTokenInput {
+  /** @minLength 1 */
+  name: string;
+  organization_id: string;
+  /** @nullable */
+  site_id?: string | null;
+  expires_at: string;
+  /**
+     * @minimum 1
+     * @maximum 10000
+     */
+  max_uses: number;
+}
+
+export type CreatedEnrollmentToken = EnrollmentToken & {
+  token: string;
+};
+
+export type ListOrganizationsParams = {
+search?: string;
+status?: ListOrganizationsStatus;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+};
+
+export type ListOrganizationsStatus = typeof ListOrganizationsStatus[keyof typeof ListOrganizationsStatus];
+
+
+export const ListOrganizationsStatus = {
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  ARCHIVED: 'ARCHIVED',
+} as const;
+
+export type ListOrganizationSitesParams = {
+include_archived?: boolean;
+};
+
+export type ListAlertsParams = {
+state?: AlertState;
+severity?: AlertSeverity;
+type?: AlertType;
+device_id?: string;
+organization?: string;
+active?: boolean;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+};
+
+export type ListNotificationsParams = {
+state?: NotificationState;
+channel?: NotificationChannel;
+event_type?: NotificationEventType;
+alert_id?: string;
+device_id?: string;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+};
+
+export type TestNotificationChannel202 = {
+  id: string;
+  state: NotificationState;
+  channel: NotificationChannel;
+};
 
 export type ListDevicesParams = {
 search?: string;
@@ -218,6 +1110,8 @@ page?: number;
  * @maximum 100
  */
 page_size?: number;
+organization_id?: string;
+site_id?: string;
 };
 
 export type ListDevicesStatus = typeof ListDevicesStatus[keyof typeof ListDevicesStatus];
@@ -228,4 +1122,168 @@ export const ListDevicesStatus = {
   OFFLINE: 'OFFLINE',
   UNKNOWN: 'UNKNOWN',
 } as const;
+
+export type GetDeviceMetricsParams = {
+/**
+ * Inclusive ISO 8601 timestamp; defaults to one hour before `to`.
+ */
+from?: string;
+/**
+ * Inclusive ISO 8601 timestamp; defaults to the current server time.
+ */
+to?: string;
+resolution?: GetDeviceMetricsResolution;
+};
+
+export type GetDeviceMetricsResolution = typeof GetDeviceMetricsResolution[keyof typeof GetDeviceMetricsResolution];
+
+
+export const GetDeviceMetricsResolution = {
+  raw: 'raw',
+  hour: 'hour',
+  day: 'day',
+  auto: 'auto',
+} as const;
+
+export type ListDeviceSoftwareParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+search?: string;
+publisher?: string;
+architecture?: SoftwareArchitecture;
+present?: ListDeviceSoftwarePresent;
+version?: string;
+sort?: ListDeviceSoftwareSort;
+direction?: ListDeviceSoftwareDirection;
+};
+
+export type ListDeviceSoftwarePresent = typeof ListDeviceSoftwarePresent[keyof typeof ListDeviceSoftwarePresent];
+
+
+export const ListDeviceSoftwarePresent = {
+  true: 'true',
+  false: 'false',
+  all: 'all',
+} as const;
+
+export type ListDeviceSoftwareSort = typeof ListDeviceSoftwareSort[keyof typeof ListDeviceSoftwareSort];
+
+
+export const ListDeviceSoftwareSort = {
+  name: 'name',
+  version: 'version',
+  publisher: 'publisher',
+  first_seen: 'first_seen',
+  last_seen: 'last_seen',
+} as const;
+
+export type ListDeviceSoftwareDirection = typeof ListDeviceSoftwareDirection[keyof typeof ListDeviceSoftwareDirection];
+
+
+export const ListDeviceSoftwareDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
+
+export type ListDeviceSoftwareChangesParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+change_type?: SoftwareChangeType;
+};
+
+export type ListFleetSoftwareParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+search?: string;
+publisher?: string;
+architecture?: SoftwareArchitecture;
+version?: string;
+};
+
+export type ListSoftwareDevicesParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+search?: string;
+version?: string;
+};
+
+export type ListDeviceServicesParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+search?: string;
+status?: string;
+startup_type?: string;
+present?: ListDeviceServicesPresent;
+};
+
+export type ListDeviceServicesPresent = typeof ListDeviceServicesPresent[keyof typeof ListDeviceServicesPresent];
+
+
+export const ListDeviceServicesPresent = {
+  true: 'true',
+  false: 'false',
+  all: 'all',
+} as const;
+
+export type ListDeviceProcessesParams = {
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+search?: string;
+username?: string;
+sort?: ListDeviceProcessesSort;
+};
+
+export type ListDeviceProcessesSort = typeof ListDeviceProcessesSort[keyof typeof ListDeviceProcessesSort];
+
+
+export const ListDeviceProcessesSort = {
+  process_name: 'process_name',
+  cpu_percent: 'cpu_percent',
+  working_set_bytes: 'working_set_bytes',
+  started_at: 'started_at',
+} as const;
+
+export type GetDeviceProcessesSummary200 = { [key: string]: unknown };
 

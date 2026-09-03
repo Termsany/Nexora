@@ -19,4 +19,6 @@ page?: number;
  * @maximum 100
  */
 page_size?: number;
+organization_id?: string;
+site_id?: string;
 };

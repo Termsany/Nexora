@@ -9,6 +9,7 @@ import type { InventoryInputDisksItem } from './inventoryInputDisksItem';
 import type { InventoryInputHardware } from './inventoryInputHardware';
 import type { InventoryInputNetworkItem } from './inventoryInputNetworkItem';
 import type { InventoryInputOs } from './inventoryInputOs';
+import type { SoftwareSnapshotInput } from './softwareSnapshotInput';
 
 export interface InventoryInput {
   hostname: string;
@@ -22,4 +23,5 @@ export interface InventoryInput {
   hardware: InventoryInputHardware;
   disks: InventoryInputDisksItem[];
   network: InventoryInputNetworkItem[];
+  software?: SoftwareSnapshotInput;
 }
