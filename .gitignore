@@ -49,3 +49,15 @@ Thumbs.db
 .local/
 .env
 node_modules/
+
+# Deployment-time build/publish artifacts (not source) - keep pilot/certificates/ tracked
+/publish/
+/pilot/windows-agent/
+
+# Generated Windows Agent download package - built by scripts/build-windows-agent-package.sh,
+# regenerated on demand, not committed (67+ MB binary; see docs/deployment.md)
+/pilot/downloads/
+
+# PKI material must never enter git - CA/server keys live at /etc/nexora/pki/ on the host
+*.key
+*.pem

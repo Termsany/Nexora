@@ -256,6 +256,7 @@
 @keyframes pulse-dot { 0%, 100% { opacity: .45; transform: scale(.86); } 50% { opacity: 1; transform: scale(1); } }
 
 @layer utilities {
+  .field-control { @apply h-10 w-full rounded-md border border-input bg-background px-3 text-[12px] text-primary outline-none focus:border-accent focus:ring-2 focus:ring-accent/20; }
   .font-mono-data { font-family: var(--app-font-mono); letter-spacing: -0.04em; }
   .animate-rise-in { animation: rise-in .45s cubic-bezier(.22,1,.36,1) both; }
   .animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }

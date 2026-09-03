@@ -1,6 +1,8 @@
 import {
+  bigint,
   boolean,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -34,7 +36,9 @@ export const devicesTable = pgTable("nexora_devices", {
   hardware: jsonb("hardware"),
   disks: jsonb("disks"),
   network: jsonb("network"),
-});
+}, (table) => [
+  index("nexora_devices_last_seen_idx").on(table.lastSeenAt),
+]);
 
 export const agentCredentialsTable = pgTable("nexora_agent_credentials", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -51,11 +55,13 @@ export const metricsTable = pgTable("nexora_device_metrics", {
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
   cpuPercent: doublePrecision("cpu_percent").notNull(),
   ramPercent: doublePrecision("ram_percent").notNull(),
-  ramUsedBytes: integer("ram_used_bytes").notNull(),
-  ramAvailableBytes: integer("ram_available_bytes").notNull(),
+  ramUsedBytes: bigint("ram_used_bytes", { mode: "number" }).notNull(),
+  ramAvailableBytes: bigint("ram_available_bytes", { mode: "number" }).notNull(),
   diskPercent: doublePrecision("disk_percent").notNull(),
   uptimeSeconds: integer("uptime_seconds").notNull(),
-});
+}, (table) => [
+  index("nexora_metrics_device_received_idx").on(table.deviceId, table.receivedAt),
+]);
 
 export const activityTable = pgTable("nexora_activity", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -67,10 +73,20 @@ export const activityTable = pgTable("nexora_activity", {
 export const enrollmentTokensTable = pgTable("nexora_enrollment_tokens", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
+  organization: text("organization").notNull().default("Default"),
   tokenHash: text("token_hash").notNull().unique(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   maxUses: integer("max_uses").notNull().default(1),
   uses: integer("uses").notNull().default(0),
   active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
+export const auditLogTable = pgTable("nexora_audit_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  action: text("action").notNull(),
+  subjectId: text("subject_id"),
+  metadata: jsonb("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

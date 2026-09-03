@@ -1,28 +1,31 @@
 using System.Security.Cryptography;
-using System.Text.Json;
+using Microsoft.Win32;
+using Nexora.Agent.Configuration;
 
 namespace Nexora.Agent.Services;
 
-public sealed class IdentityService
+public sealed class IdentityService(ILogger<IdentityService> logger, string? filePath = null)
 {
-    private readonly string directory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Nexora", "Agent");
-    private string FilePath => Path.Combine(directory, "identity.json");
+    private string FilePath { get; } = filePath ?? Path.Combine(AgentConfiguration.DataDirectory, "device-id");
 
-    public async Task<AgentIdentity> GetOrCreateAsync(CancellationToken cancellationToken)
+    public async Task<Guid> GetOrCreateAsync(CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(directory);
-        if (File.Exists(FilePath))
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? AgentConfiguration.DataDirectory);
+        if (File.Exists(FilePath) && Guid.TryParse(await File.ReadAllTextAsync(FilePath, cancellationToken), out var existing))
         {
-            var existing = await JsonSerializer.DeserializeAsync<AgentIdentity>(
-                File.OpenRead(FilePath), cancellationToken: cancellationToken);
-            if (existing is not null) return existing;
+            logger.LogInformation("IdentityLoaded DeviceUuid={DeviceUuid}", existing);
+            return existing;
         }
+        var created = Guid.NewGuid();
+        await File.WriteAllTextAsync(FilePath, created.ToString("D"), cancellationToken);
+        logger.LogInformation("IdentityCreated DeviceUuid={DeviceUuid}", created);
+        return created;
+    }
 
-        var identity = new AgentIdentity(Guid.NewGuid(), null, null);
-        await File.WriteAllTextAsync(FilePath, JsonSerializer.Serialize(identity), cancellationToken);
-        return identity;
+    public string GetMachineGuidHash()
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography");
+        var machineGuid = key?.GetValue("MachineGuid")?.ToString() ?? throw new InvalidOperationException("Windows MachineGuid is unavailable");
+        return Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(machineGuid))).ToLowerInvariant();
     }
 }
-
-public sealed record AgentIdentity(Guid DeviceUuid, string? AgentId, string? AgentToken);

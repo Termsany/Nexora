@@ -1,41 +1,37 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
+using Nexora.Agent.Models;
 
 namespace Nexora.Agent.Services;
 
-public sealed class ApiClient(HttpClient httpClient)
+public sealed class NexoraApiClient(HttpClient httpClient)
 {
-    private string? token;
-    private string BaseUrl => Environment.GetEnvironmentVariable("NEXORA_API_URL") ?? "http://localhost:5000/api";
-
-    public async Task<bool> EnrollAsync(AgentIdentity identity, CancellationToken cancellationToken)
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        var enrollmentToken = Environment.GetEnvironmentVariable("NEXORA_ENROLLMENT_TOKEN");
-        if (string.IsNullOrWhiteSpace(enrollmentToken)) return false;
-        var response = await httpClient.PostAsJsonAsync($"{BaseUrl}/v1/agents/enroll", new
-        {
-            enrollment_token = enrollmentToken,
-            device_uuid = identity.DeviceUuid,
-            hostname = Environment.MachineName,
-            machine_guid_hash = "managed-by-agent",
-            agent_version = "0.1.0"
-        }, cancellationToken);
-        if (!response.IsSuccessStatusCode) return false;
-        var result = await response.Content.ReadFromJsonAsync<EnrollmentResult>(cancellationToken: cancellationToken);
-        token = result?.AgentToken;
-        return !string.IsNullOrWhiteSpace(token);
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
+
+    public async Task<EnrollmentResponse> EnrollAsync(EnrollmentRequest payload, CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsJsonAsync("v1/agents/enroll", payload, JsonOptions, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<EnrollmentResponse>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("Enrollment response was empty");
     }
 
-    public async Task SendHeartbeatAsync(CancellationToken cancellationToken)
+    public Task SendHeartbeatAsync(string token, HeartbeatPayload payload, CancellationToken cancellationToken) => SendAuthenticatedAsync("v1/agents/heartbeat", token, payload, cancellationToken);
+    public Task SendInventoryAsync(string token, InventoryPayload payload, CancellationToken cancellationToken) => SendAuthenticatedAsync("v1/agents/inventory", token, payload, cancellationToken);
+    public Task SendMetricsAsync(string token, MetricsPayload payload, CancellationToken cancellationToken) => SendAuthenticatedAsync("v1/agents/metrics", token, payload, cancellationToken);
+
+    private async Task SendAuthenticatedAsync<T>(string path, string token, T payload, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(token)) return;
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/v1/agents/heartbeat")
+        using var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
-            Content = JsonContent.Create(new { agent_version = "0.1.0", uptime_seconds = Environment.TickCount64 / 1000, logged_in_user = Environment.UserName })
+            Content = JsonContent.Create(payload, options: JsonOptions),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        await httpClient.SendAsync(request, cancellationToken);
+        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
     }
-
-    private sealed record EnrollmentResult(string AgentToken);
 }

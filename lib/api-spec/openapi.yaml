@@ -16,6 +16,8 @@ tags:
     description: Enrolled endpoint devices
   - name: agents
     description: Agent enrollment and telemetry
+  - name: administration
+    description: Administrative enrollment-token operations
 paths:
   /healthz:
     get:
@@ -197,6 +199,44 @@ paths:
           description: Metrics accepted
         "401":
           description: Invalid agent credentials
+  /v1/admin/enrollment-tokens:
+    get:
+      operationId: listEnrollmentTokens
+      tags: [administration]
+      security: [{ adminBearer: [] }]
+      responses:
+        "200":
+          description: Enrollment-token metadata without raw secrets
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/EnrollmentToken" } }
+    post:
+      operationId: createEnrollmentToken
+      tags: [administration]
+      security: [{ adminBearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateEnrollmentTokenInput" }
+      responses:
+        "201":
+          description: Token created; raw token is returned only here
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedEnrollmentToken" }
+  /v1/admin/enrollment-tokens/{token_id}/revoke:
+    post:
+      operationId: revokeEnrollmentToken
+      tags: [administration]
+      security: [{ adminBearer: [] }]
+      parameters:
+        - name: token_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Token revoked }
 components:
   parameters:
     DeviceId:
@@ -208,6 +248,9 @@ components:
         format: uuid
   securitySchemes:
     agentBearer:
+      type: http
+      scheme: bearer
+    adminBearer:
       type: http
       scheme: bearer
   schemas:
@@ -335,7 +378,7 @@ components:
         enrollment_token: { type: string, minLength: 1 }
         device_uuid: { type: string, format: uuid }
         hostname: { type: string, minLength: 1 }
-        machine_guid_hash: { type: string, minLength: 1 }
+        machine_guid_hash: { type: string, pattern: "^[a-fA-F0-9]{64}$" }
         agent_version: { type: string, minLength: 1 }
     EnrollmentResponse:
       type: object
@@ -378,4 +421,31 @@ components:
         ram_available_bytes: { type: integer, minimum: 0 }
         disk_percent: { type: number, minimum: 0, maximum: 100 }
         uptime_seconds: { type: integer, minimum: 0 }
-
+    EnrollmentToken:
+      type: object
+      required: [id, name, organization, expires_at, max_uses, current_uses, created_at, active]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        organization: { type: string }
+        expires_at: { type: string, format: date-time }
+        max_uses: { type: integer }
+        current_uses: { type: integer }
+        created_at: { type: string, format: date-time }
+        revoked_at: { type: [string, "null"], format: date-time }
+        active: { type: boolean }
+    CreateEnrollmentTokenInput:
+      type: object
+      required: [name, organization, expires_at, max_uses]
+      properties:
+        name: { type: string, minLength: 1 }
+        organization: { type: string, minLength: 1 }
+        expires_at: { type: string, format: date-time }
+        max_uses: { type: integer, minimum: 1, maximum: 10000 }
+    CreatedEnrollmentToken:
+      allOf:
+        - $ref: "#/components/schemas/EnrollmentToken"
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string }
