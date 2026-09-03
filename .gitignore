@@ -61,3 +61,7 @@ node_modules/
 # PKI material must never enter git - CA/server keys live at /etc/nexora/pki/ on the host
 *.key
 *.pem
+
+# .NET build outputs
+**/bin/
+**/obj/
