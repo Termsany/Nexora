@@ -1,0 +1,84 @@
+name: Task 010 Windows Runtime Validation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "agent/**"
+      - "scripts/windows/task010-runtime-validation.ps1"
+      - "docs/task010-windows-runner.md"
+      - ".github/workflows/task010-windows-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-runtime-validation:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Show runtime information
+        shell: powershell
+        run: |
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsBuildNumber
+          $PSVersionTable
+          dotnet --info
+
+      - name: Verify Task 010 validation files
+        shell: powershell
+        run: |
+          if (-not (Test-Path ".\scripts\windows\task010-runtime-validation.ps1")) {
+            throw "Missing scripts/windows/task010-runtime-validation.ps1"
+          }
+
+          if (-not (Test-Path ".\docs\task010-windows-runner.md")) {
+            throw "Missing docs/task010-windows-runner.md"
+          }
+
+      - name: Run Task 010 Windows runtime validation
+        shell: powershell
+        run: |
+          powershell.exe `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File ".\scripts\windows\task010-runtime-validation.ps1"
+
+      - name: Publish Agent self-contained win-x64
+        shell: powershell
+        run: |
+          dotnet publish `
+            ".\agent\Nexora.Agent\Nexora.Agent.csproj" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -o ".\artifacts\nexora-agent-win-x64"
+
+      - name: Validate Agent artifact
+        shell: powershell
+        run: |
+          $exe = ".\artifacts\nexora-agent-win-x64\nexora-agent.exe"
+
+          if (-not (Test-Path $exe)) {
+            throw "nexora-agent.exe was not produced"
+          }
+
+          Get-Item $exe | Select-Object FullName, Length, LastWriteTime
+
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task010-windows-validation
+          path: |
+            artifacts/
+            task010-windows-validation.log
+          if-no-files-found: warn
