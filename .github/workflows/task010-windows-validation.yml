@@ -44,6 +44,11 @@ jobs:
             throw "Missing docs/task010-windows-runner.md"
           }
 
+      - name: Verify dedicated Task 010 tests exist
+        shell: powershell
+        run: |
+          if (-not (Get-ChildItem .\agent\Nexora.Agent.Tests -Recurse -Filter *.cs | Select-String -Pattern 'Task010_')) { throw "No Task010 acceptance tests found" }
+
       - name: Run Task 010 Windows runtime validation
         shell: powershell
         run: |
@@ -72,6 +77,8 @@ jobs:
           }
 
           Get-Item $exe | Select-Object FullName, Length, LastWriteTime
+          if (-not (Test-Path ".\artifacts\task010-windows-validation\task010-agent.trx")) { throw "Missing Task010 TRX" }
+          if (-not (Select-String -Path ".\artifacts\task010-windows-validation\task010-agent.trx" -Pattern "Task010_")) { throw "TRX has no Task010 tests" }
 
       - name: Upload validation artifacts
         if: always()
