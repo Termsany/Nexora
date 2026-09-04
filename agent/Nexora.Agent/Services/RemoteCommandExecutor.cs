@@ -19,26 +19,28 @@ public sealed class RemoteCommandExecutor
             FileName = shell.Equals("CMD", StringComparison.OrdinalIgnoreCase) ? "cmd.exe" : shell.Equals("POWERSHELL", StringComparison.OrdinalIgnoreCase) ? "powershell.exe" : throw new ArgumentException("Unsupported shell", nameof(shell)),
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             WorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory) ? Environment.CurrentDirectory : workingDirectory,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
-        if (shell.Equals("CMD", StringComparison.OrdinalIgnoreCase)) psi.ArgumentList.Add("/c");
-        else { psi.ArgumentList.Add("-NoProfile"); psi.ArgumentList.Add("-NonInteractive"); psi.ArgumentList.Add("-Command"); }
-        psi.ArgumentList.Add(command);
+        if (shell.Equals("CMD", StringComparison.OrdinalIgnoreCase)) { psi.ArgumentList.Add("/c"); psi.ArgumentList.Add("chcp 65001>nul & " + command); }
+        else { psi.ArgumentList.Add("-NoProfile"); psi.ArgumentList.Add("-NonInteractive"); psi.ArgumentList.Add("-Command"); psi.ArgumentList.Add("[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " + command); }
         using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         process.Start();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-        var stdout = ReadBoundedAsync(process.StandardOutput, timeout.Token);
-        var stderr = ReadBoundedAsync(process.StandardError, timeout.Token);
+        var stdout = ReadBoundedAsync(process.StandardOutput);
+        var stderr = ReadBoundedAsync(process.StandardError);
         var timedOut = false;
-        try { await process.WaitForExitAsync(timeout.Token); } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { timedOut = true; try { process.Kill(entireProcessTree: true); } catch { } await process.WaitForExitAsync(CancellationToken.None); }
+        var exitTask = process.WaitForExitAsync(cancellationToken);
+        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), cancellationToken);
+        var completed = await Task.WhenAny(exitTask, timeoutTask);
+        if (completed == timeoutTask && !exitTask.IsCompleted) { timedOut = true; try { process.Kill(entireProcessTree: true); } catch { } await process.WaitForExitAsync(CancellationToken.None); }
         var output = await stdout; var error = await stderr;
         return new RemoteCommandResult(timedOut ? null : process.ExitCode, output.Text, error.Text, output.Truncated, error.Truncated, timedOut);
     }
 
-    private static async Task<(string Text, bool Truncated)> ReadBoundedAsync(StreamReader reader, CancellationToken token)
+    private static async Task<(string Text, bool Truncated)> ReadBoundedAsync(StreamReader reader)
     {
         var buffer = new char[8192]; var builder = new StringBuilder(); var truncated = false;
-        while (true) { var count = await reader.ReadAsync(buffer.AsMemory(), token); if (count == 0) break; if (builder.Length < OutputLimit) { var take = Math.Min(count, OutputLimit - builder.Length); builder.Append(buffer, 0, take); if (take < count) truncated = true; } else truncated = true; }
+        while (true) { var count = await reader.ReadAsync(buffer.AsMemory()); if (count == 0) break; if (builder.Length < OutputLimit) { var take = Math.Min(count, OutputLimit - builder.Length); builder.Append(buffer, 0, take); if (take < count) truncated = true; } else truncated = true; }
         return (builder.ToString(), truncated);
     }
 }
