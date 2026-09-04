@@ -12,6 +12,7 @@ public sealed class RemoteCommandExecutor
 
     public async Task<RemoteCommandResult> ExecuteAsync(string shell, string command, int timeoutSeconds, string? workingDirectory, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(command) || command.Length > 64 * 1024) throw new ArgumentException("Command is invalid", nameof(command));
         if (timeoutSeconds is < 1 or > 900) throw new ArgumentOutOfRangeException(nameof(timeoutSeconds));
         var psi = new ProcessStartInfo
@@ -19,10 +20,10 @@ public sealed class RemoteCommandExecutor
             FileName = shell.Equals("CMD", StringComparison.OrdinalIgnoreCase) ? "cmd.exe" : shell.Equals("POWERSHELL", StringComparison.OrdinalIgnoreCase) ? "powershell.exe" : throw new ArgumentException("Unsupported shell", nameof(shell)),
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             WorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory) ? Environment.CurrentDirectory : workingDirectory,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
+            StandardOutputEncoding = shell.Equals("CMD", StringComparison.OrdinalIgnoreCase) ? Encoding.Unicode : Encoding.UTF8,
+            StandardErrorEncoding = shell.Equals("CMD", StringComparison.OrdinalIgnoreCase) ? Encoding.Unicode : Encoding.UTF8,
         };
-        if (shell.Equals("CMD", StringComparison.OrdinalIgnoreCase)) { psi.ArgumentList.Add("/c"); psi.ArgumentList.Add("chcp 65001>nul & " + command); }
+        if (shell.Equals("CMD", StringComparison.OrdinalIgnoreCase)) { psi.ArgumentList.Add("/d"); psi.ArgumentList.Add("/u"); psi.ArgumentList.Add("/s"); psi.ArgumentList.Add("/c"); psi.ArgumentList.Add("chcp 65001>nul && " + command); }
         else { psi.ArgumentList.Add("-NoProfile"); psi.ArgumentList.Add("-NonInteractive"); psi.ArgumentList.Add("-Command"); psi.ArgumentList.Add("[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " + command); }
         using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         process.Start();
