@@ -2,13 +2,14 @@ import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
-import router from "./routes";
+import router from "./routes/index.ts";
 import { logger } from "./lib/logger";
 import { attachTenantContext } from "./tenancy/context";
 import { requestId } from "./security/request-id";
 import { csrfProtection } from "./security/csrf";
 import { validateSecurityConfiguration } from "./security/config";
 
+export function createApp(): Express {
 const app: Express = express();
 validateSecurityConfiguration();
 
@@ -56,4 +57,8 @@ app.use("/api", attachTenantContext);
 app.use("/api", csrfProtection);
 app.use("/api", router);
 
+return app;
+}
+
+const app = createApp();
 export default app;

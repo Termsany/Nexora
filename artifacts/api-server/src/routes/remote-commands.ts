@@ -13,7 +13,7 @@ const uuid = z.string().uuid();
 const enabled = () => process.env.REMOTE_COMMANDS_ENABLED === "true";
 const commandSchema = z.object({ device_id: uuid, shell: z.enum(["CMD", "POWERSHELL"]), command: z.string().trim().min(1).max(64 * 1024), timeout_seconds: z.coerce.number().int().min(1).max(900).default(60), reason: z.string().trim().min(1).max(1000), working_directory: z.string().max(260).optional() });
 async function agentDevice(req: any) { const raw = req.headers.authorization; if (!raw?.startsWith("Bearer ")) return null; const hash = crypto.createHash("sha256").update(raw.slice(7)).digest("hex"); const [row] = await db.select({ device: devicesTable }).from(agentCredentialsTable).innerJoin(devicesTable, eq(agentCredentialsTable.deviceId, devicesTable.id)).where(and(eq(agentCredentialsTable.tokenHash, hash), sql`${agentCredentialsTable.revokedAt} is null`)); return row?.device ?? null; }
-async function signedAgent(req: any, res: any) { const device = await agentDevice(req); if (!device) { res.status(401).json({ error: "Invalid agent credentials" }); return null; } const h=req.headers; const version=h["x-nexora-signature-version"], keyId=h["x-nexora-key-id"], ts=h["x-nexora-timestamp"], nonce=h["x-nexora-nonce"], sig=h["x-nexora-signature"]; if(version!=="nexora-agent-sign-v1"||!keyId||!ts||!nonce||!sig){res.status(401).json({error:"Signed request required"});return null;} const timestamp=Number(ts); if(!Number.isFinite(timestamp)||Math.abs(Date.now()/1000-timestamp)>300){res.status(401).json({error:"Invalid signed request"});return null;} const [key]=await db.select().from(agentSigningKeysTable).where(and(eq(agentSigningKeysTable.id,keyId),eq(agentSigningKeysTable.deviceId,device.id),eq(agentSigningKeysTable.status,"ACTIVE"))); if(!key||!verifyAgentSignature(key.publicKey,canonicalAgentRequest(req.method,req.path,(req.rawBody??Buffer.from("")),ts,nonce,device.agentId,key.id),sig)){res.status(401).json({error:"Invalid signed request"});return null;} try { await db.insert(agentRequestNoncesTable).values({deviceId:device.id,signingKeyId:key.id,nonceHash:crypto.createHash("sha256").update(nonce).digest("hex"),requestTimestamp:timestamp,expiresAt:new Date((timestamp+600)*1000)}); } catch { res.status(409).json({error:"Replay rejected"}); return null; } return device; }
+async function signedAgent(req: any, res: any) { const device = await agentDevice(req); if (!device) { res.status(401).json({ error: "Invalid agent credentials" }); return null; } const h=req.headers; const version=h["x-nexora-signature-version"], keyId=h["x-nexora-key-id"], ts=h["x-nexora-timestamp"], nonce=h["x-nexora-nonce"], sig=h["x-nexora-signature"]; if(version!=="nexora-agent-sign-v1"||!keyId||!ts||!nonce||!sig){res.status(401).json({error:"Signed request required"});return null;} const timestamp=Number(ts); if(!Number.isFinite(timestamp)||Math.abs(Date.now()/1000-timestamp)>300){res.status(401).json({error:"Invalid signed request"});return null;} const [key]=await db.select().from(agentSigningKeysTable).where(and(eq(agentSigningKeysTable.id,keyId),eq(agentSigningKeysTable.deviceId,device.id),eq(agentSigningKeysTable.status,"ACTIVE"))); if(!key||!verifyAgentSignature(key.publicKey,canonicalAgentRequest(req.method,req.path,(req.rawBody??Buffer.from("")),ts,nonce,device.agentId,key.id),sig)){res.status(401).json({error:"Invalid signed request"});return null;} try { await db.insert(agentRequestNoncesTable).values({deviceId:device.id,signingKeyId:key.id,nonceHash:crypto.createHash("sha256").update(nonce).digest("hex"),requestTimestamp:timestamp,expiresAt:new Date((timestamp+600)*1000)}); } catch { await recordAudit({ action: "REMOTE_COMMAND_REPLAY_REJECTED", actorLabel: `agent:${device.agentId}`, organizationId: device.organizationId, targetType: "remote_command", targetId: null, result: "DENIED", req }); res.status(409).json({error:"Replay rejected"}); return null; } return device; }
 
 router.post("/v1/agent/signing-key", async (req, res): Promise<void> => {
   const device = await agentDevice(req); if (!device) { res.status(401).json({ error: "Invalid agent credentials" }); return; }
@@ -32,16 +32,49 @@ router.post("/v1/agent/remote-commands/claim", async (req, res): Promise<void> =
   if (!job) { res.status(204).end(); return; }
   const executionId = crypto.randomUUID(); const capability = crypto.randomBytes(32).toString("base64url");
   const [claimed] = await db.update(remoteCommandJobsTable).set({ status: "CLAIMED", claimedAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000), executionId, executionCapabilityHash: crypto.createHash("sha256").update(capability).digest("hex"), executionAttempt: sql`${remoteCommandJobsTable.executionAttempt} + 1`, updatedAt: new Date() }).where(and(eq(remoteCommandJobsTable.id, job.id), eq(remoteCommandJobsTable.status, "READY"))).returning();
-  if (!claimed) { res.status(204).end(); return; } res.json({ id: claimed.id, execution_id: executionId, execution_capability: capability, shell: claimed.shellType, command: (claimed.commandPayload as any).command, timeout_seconds: claimed.timeoutSeconds, working_directory: claimed.workingDirectory });
+  if (!claimed) { res.status(204).end(); return; }
+  await recordAudit({ action: "REMOTE_COMMAND_CLAIMED", actorLabel: `agent:${device.agentId}`, organizationId: claimed.organizationId, targetType: "remote_command", targetId: claimed.id, req });
+  res.json({ id: claimed.id, execution_id: executionId, execution_capability: capability, shell: claimed.shellType, command: (claimed.commandPayload as any).command, timeout_seconds: claimed.timeoutSeconds, working_directory: claimed.workingDirectory });
 });
 
 async function executionRequest(req: any, res: any, action: "start" | "heartbeat" | "result") {
   const device = await signedAgent(req,res); if (!device) return;
   const idResult = uuid.safeParse(req.params.id); const body = z.object({ execution_id: uuid, execution_capability: z.string().min(20).max(200), exit_code: z.number().int().optional(), stdout: z.string().max(1024 * 1024).optional(), stderr: z.string().max(1024 * 1024).optional(), stdout_truncated: z.boolean().optional(), stderr_truncated: z.boolean().optional() }).safeParse(req.body); if (!idResult.success || !body.success) { res.status(400).json({ error: "Invalid execution request" }); return; }
   const [job] = await db.select().from(remoteCommandJobsTable).where(and(eq(remoteCommandJobsTable.id, idResult.data), eq(remoteCommandJobsTable.deviceId, device.id))); if (!job || job.executionId !== body.data.execution_id || job.executionCapabilityHash !== crypto.createHash("sha256").update(body.data.execution_capability).digest("hex")) { res.status(404).json({ error: "Not found" }); return; }
-  if (action === "start") { if (job.status === "RUNNING") { res.json(job); return; } if (job.status !== "CLAIMED") { res.status(409).json({ error: "Invalid state" }); return; } const [updated] = await db.update(remoteCommandJobsTable).set({ status: "RUNNING", startedAt: new Date(), lastExecutionHeartbeatAt: new Date(), updatedAt: new Date() }).where(and(eq(remoteCommandJobsTable.id, job.id), eq(remoteCommandJobsTable.status, "CLAIMED"))).returning(); res.json(updated); return; }
+  if (action === "start") { if (job.status === "RUNNING") { res.json(job); return; } if (job.status !== "CLAIMED") { res.status(409).json({ error: "Invalid state" }); return; } const [updated] = await db.update(remoteCommandJobsTable).set({ status: "RUNNING", startedAt: new Date(), lastExecutionHeartbeatAt: new Date(), updatedAt: new Date() }).where(and(eq(remoteCommandJobsTable.id, job.id), eq(remoteCommandJobsTable.status, "CLAIMED"))).returning(); if (updated) await recordAudit({ action: "REMOTE_COMMAND_STARTED", actorLabel: `agent:${device.agentId}`, organizationId: updated.organizationId, targetType: "remote_command", targetId: updated.id, req }); res.json(updated); return; }
   if (action === "heartbeat") { if (!["CLAIMED", "RUNNING"].includes(job.status)) { res.status(409).json({ error: "Invalid state" }); return; } const [updated] = await db.update(remoteCommandJobsTable).set({ lastExecutionHeartbeatAt: new Date(), leaseExpiresAt: new Date(Date.now() + 60_000), updatedAt: new Date() }).where(eq(remoteCommandJobsTable.id, job.id)).returning(); res.json(updated); return; }
-  if (["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(job.status)) { res.json(job); return; } const terminal = body.data.exit_code === 0 ? "SUCCEEDED" : "FAILED"; const [updated] = await db.update(remoteCommandJobsTable).set({ status: terminal as any, completedAt: new Date(), exitCode: body.data.exit_code ?? null, stdout: body.data.stdout ?? null, stderr: body.data.stderr ?? null, stdoutTruncated: body.data.stdout_truncated ?? false, stderrTruncated: body.data.stderr_truncated ?? false, updatedAt: new Date() }).where(eq(remoteCommandJobsTable.id, job.id)).returning(); res.json(updated);
+  if (["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"].includes(job.status)) {
+    const sameResult = job.exitCode === (body.data.exit_code ?? null)
+      && job.stdout === (body.data.stdout ?? null)
+      && job.stderr === (body.data.stderr ?? null)
+      && job.stdoutTruncated === (body.data.stdout_truncated ?? false)
+      && job.stderrTruncated === (body.data.stderr_truncated ?? false);
+    if (sameResult) { res.json(job); return; }
+    await recordAudit({
+      action: "REMOTE_COMMAND_RESULT_CONFLICT",
+      actorLabel: `agent:${device.agentId}`,
+      organizationId: job.organizationId,
+      targetType: "remote_command",
+      targetId: job.id,
+      result: "DENIED",
+      req,
+    });
+    res.status(409).json({ error: "Conflicting terminal result" });
+    return;
+  }
+  // A result arriving while a cancellation is pending is the Agent's
+  // acknowledgement of that cancellation: whatever the reported exit code,
+  // the authoritative outcome the user asked for is CANCELLED. A result that
+  // instead lands before the cancel request ever reaches CANCEL_REQUESTED
+  // (the RUNNING race) still reports its genuine exit code below, unaffected.
+  const cancelling = job.status === "CANCEL_REQUESTED";
+  const terminal = cancelling ? "CANCELLED" : body.data.exit_code === 0 ? "SUCCEEDED" : "FAILED";
+  const [updated] = await db.update(remoteCommandJobsTable).set({ status: terminal as any, completedAt: new Date(), exitCode: body.data.exit_code ?? null, stdout: body.data.stdout ?? null, stderr: body.data.stderr ?? null, stdoutTruncated: body.data.stdout_truncated ?? false, stderrTruncated: body.data.stderr_truncated ?? false, updatedAt: new Date() }).where(eq(remoteCommandJobsTable.id, job.id)).returning();
+  if (updated) {
+    const action = terminal === "SUCCEEDED" ? "REMOTE_COMMAND_SUCCEEDED" : terminal === "CANCELLED" ? "REMOTE_COMMAND_CANCELLED" : "REMOTE_COMMAND_FAILED";
+    await recordAudit({ action, actorLabel: `agent:${device.agentId}`, organizationId: updated.organizationId, targetType: "remote_command", targetId: updated.id, req });
+  }
+  res.json(updated);
 }
 router.post("/v1/agent/remote-commands/:id/start", (req, res) => executionRequest(req, res, "start"));
 router.post("/v1/agent/remote-commands/:id/heartbeat", (req, res) => executionRequest(req, res, "heartbeat"));

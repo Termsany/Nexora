@@ -30,6 +30,10 @@ tags:
     description: Interactive console authentication
   - name: organizations
     description: Tenant organizations, sites and memberships
+  - name: privileged-actions
+    description: Two-person-approval foundation for privileged device operations
+  - name: remote-commands
+    description: Signed remote command request, approval and execution lifecycle
 paths:
   /healthz:
     get:
@@ -818,6 +822,249 @@ paths:
       security: [{ adminBearer: [] }]
       parameters: [{ $ref: "#/components/parameters/DeviceId" }]
       responses: { "200": { description: Process summary, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+  /v1/privileged-actions:
+    post:
+      operationId: requestPrivilegedAction
+      tags: [privileged-actions]
+      summary: Request a privileged device operation, pending approval
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PrivilegedActionInput" } } }
+      responses:
+        "201": { description: Created in PENDING_APPROVAL, content: { application/json: { schema: { $ref: "#/components/schemas/PrivilegedAction" } } } }
+        "400": { description: Invalid request }
+        "403": { description: Insufficient permissions }
+        "404": { description: Device not found or not reachable by this tenant }
+    get:
+      operationId: listPrivilegedActions
+      tags: [privileged-actions]
+      summary: List privileged action requests
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: organization, in: query, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200": { description: Paginated privileged actions, content: { application/json: { schema: { $ref: "#/components/schemas/PrivilegedActionList" } } } }
+        "400": { description: Invalid query }
+        "404": { description: Not found }
+  /v1/privileged-actions/{id}:
+    get:
+      operationId: getPrivilegedAction
+      tags: [privileged-actions]
+      summary: Get privileged action detail
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/PrivilegedActionId" }]
+      responses:
+        "200": { description: Privileged action detail, content: { application/json: { schema: { $ref: "#/components/schemas/PrivilegedAction" } } } }
+        "404": { description: Not found }
+  /v1/privileged-actions/{id}/approve:
+    post:
+      operationId: approvePrivilegedAction
+      tags: [privileged-actions]
+      summary: Approve a pending privileged action (two-person rule enforced)
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/PrivilegedActionId" }]
+      responses:
+        "200": { description: Approved, content: { application/json: { schema: { $ref: "#/components/schemas/PrivilegedAction" } } } }
+        "403": { description: Insufficient permissions, or the requester cannot self-approve under the two-person rule }
+        "404": { description: Not found }
+        "409": { description: Action is no longer pending }
+  /v1/privileged-actions/{id}/reject:
+    post:
+      operationId: rejectPrivilegedAction
+      tags: [privileged-actions]
+      summary: Reject a pending privileged action
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/PrivilegedActionId" }]
+      responses:
+        "200": { description: Rejected, content: { application/json: { schema: { $ref: "#/components/schemas/PrivilegedAction" } } } }
+        "403": { description: Insufficient permissions }
+        "404": { description: Not found }
+        "409": { description: Action is no longer pending }
+  /v1/privileged-actions/{id}/cancel:
+    post:
+      operationId: cancelPrivilegedAction
+      tags: [privileged-actions]
+      summary: Cancel a privileged action the caller requested
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/PrivilegedActionId" }]
+      responses:
+        "200": { description: Cancelled, content: { application/json: { schema: { $ref: "#/components/schemas/PrivilegedAction" } } } }
+        "403": { description: Insufficient permissions }
+        "404": { description: Not found }
+        "409": { description: Action is no longer pending }
+  /v1/remote-commands:
+    post:
+      operationId: requestRemoteCommand
+      tags: [remote-commands]
+      summary: Request execution of a remote command, pending approval
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandInput" } } }
+      responses:
+        "201": { description: Created in PENDING status, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
+        "400": { description: Invalid request }
+        "403": { description: Insufficient permissions }
+        "404": { description: Device not found or not reachable by this tenant }
+        "503": { description: Remote commands are disabled (REMOTE_COMMANDS_ENABLED=false) }
+    get:
+      operationId: listRemoteCommands
+      tags: [remote-commands]
+      summary: List remote command jobs
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: organization, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Remote command jobs, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJobList" } } } }
+        "404": { description: Not found }
+  /v1/remote-commands/{id}:
+    get:
+      operationId: getRemoteCommand
+      tags: [remote-commands]
+      summary: Get remote command job detail, including output once terminal
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/RemoteCommandId" }]
+      responses:
+        "200": { description: Remote command job detail, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
+        "404": { description: Not found }
+  /v1/remote-commands/{id}/cancel:
+    post:
+      operationId: cancelRemoteCommand
+      tags: [remote-commands]
+      summary: Cancel a remote command job
+      description: >-
+        PENDING/READY cancel immediately to CANCELLED. CLAIMED/RUNNING soft-cancel
+        to CANCEL_REQUESTED and wait for the Agent to acknowledge via a result.
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/RemoteCommandId" }]
+      responses:
+        "200": { description: CANCELLED or CANCEL_REQUESTED, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
+        "403": { description: Insufficient permissions }
+        "404": { description: Not found }
+        "409": { description: Command is no longer cancellable }
+  /v1/agent/signing-key:
+    post:
+      operationId: registerAgentSigningKey
+      tags: [remote-commands]
+      summary: Register this device's ECDSA public signing key
+      security: [{ agentBearer: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AgentSigningKeyInput" } } }
+      responses:
+        "200": { description: An identical active key already exists (idempotent), content: { application/json: { schema: { $ref: "#/components/schemas/AgentSigningKeyResponse" } } } }
+        "201": { description: Key registered, content: { application/json: { schema: { $ref: "#/components/schemas/AgentSigningKeyResponse" } } } }
+        "400": { description: Invalid signing key }
+        "401": { description: Invalid agent credentials }
+        "409": { description: A different active signing key already exists }
+  /v1/agent/remote-commands/claim:
+    post:
+      operationId: claimRemoteCommand
+      tags: [remote-commands]
+      summary: Atomically claim the oldest eligible READY job for this device
+      security: [{ agentBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/NexoraSignatureVersion" }
+        - { $ref: "#/components/parameters/NexoraKeyId" }
+        - { $ref: "#/components/parameters/NexoraTimestamp" }
+        - { $ref: "#/components/parameters/NexoraNonce" }
+        - { $ref: "#/components/parameters/NexoraSignature" }
+      responses:
+        "200": { description: Claimed; execution identity issued, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandClaim" } } } }
+        "204": { description: No eligible job (feature gates unmet, or nothing READY) }
+        "401": { description: Invalid signed request }
+        "409": { description: Replay rejected (nonce already used) }
+  /v1/agent/remote-commands/{id}/start:
+    post:
+      operationId: startRemoteCommandExecution
+      tags: [remote-commands]
+      summary: Transition a claimed execution to RUNNING
+      security: [{ agentBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/RemoteCommandId" }
+        - { $ref: "#/components/parameters/NexoraSignatureVersion" }
+        - { $ref: "#/components/parameters/NexoraKeyId" }
+        - { $ref: "#/components/parameters/NexoraTimestamp" }
+        - { $ref: "#/components/parameters/NexoraNonce" }
+        - { $ref: "#/components/parameters/NexoraSignature" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ExecutionAckInput" } } }
+      responses:
+        "200": { description: RUNNING (or already RUNNING, idempotent), content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
+        "400": { description: Invalid execution request }
+        "401": { description: Invalid signed request }
+        "404": { description: Not found, or execution identity/device binding mismatch }
+        "409": { description: Job is not CLAIMED (terminal jobs cannot be (re)started), or replayed nonce }
+  /v1/agent/remote-commands/{id}/heartbeat:
+    post:
+      operationId: heartbeatRemoteCommandExecution
+      tags: [remote-commands]
+      summary: Renew the execution lease
+      security: [{ agentBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/RemoteCommandId" }
+        - { $ref: "#/components/parameters/NexoraSignatureVersion" }
+        - { $ref: "#/components/parameters/NexoraKeyId" }
+        - { $ref: "#/components/parameters/NexoraTimestamp" }
+        - { $ref: "#/components/parameters/NexoraNonce" }
+        - { $ref: "#/components/parameters/NexoraSignature" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ExecutionAckInput" } } }
+      responses:
+        "200": { description: Lease renewed, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
+        "401": { description: Invalid signed request }
+        "404": { description: Not found, or execution identity/device binding mismatch }
+        "409": { description: Job is not CLAIMED/RUNNING, or replayed nonce }
+  /v1/agent/remote-commands/{id}/result:
+    post:
+      operationId: submitRemoteCommandResult
+      tags: [remote-commands]
+      summary: Submit the terminal result of an execution
+      description: >-
+        A result arriving while a cancellation is pending (CANCEL_REQUESTED)
+        always resolves to CANCELLED regardless of the reported exit code. An
+        identical result resubmitted with a fresh nonce is idempotent; a
+        conflicting result against an already-terminal job is rejected 409 and
+        recorded as REMOTE_COMMAND_RESULT_CONFLICT.
+      security: [{ agentBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/RemoteCommandId" }
+        - { $ref: "#/components/parameters/NexoraSignatureVersion" }
+        - { $ref: "#/components/parameters/NexoraKeyId" }
+        - { $ref: "#/components/parameters/NexoraTimestamp" }
+        - { $ref: "#/components/parameters/NexoraNonce" }
+        - { $ref: "#/components/parameters/NexoraSignature" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandResultInput" } } }
+      responses:
+        "200": { description: Terminal state recorded (or idempotent repeat), content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
+        "400": { description: Invalid execution request, or output exceeds the permitted size }
+        "401": { description: Invalid signed request }
+        "404": { description: Not found, or execution identity/device binding mismatch }
+        "409": { description: Conflicting terminal result, or replayed nonce }
+  /v1/agent/remote-commands/{id}/status:
+    post:
+      operationId: getRemoteCommandExecutionStatus
+      tags: [remote-commands]
+      summary: Poll execution status and pending-cancellation flag
+      security: [{ agentBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/RemoteCommandId" }
+        - { $ref: "#/components/parameters/NexoraSignatureVersion" }
+        - { $ref: "#/components/parameters/NexoraKeyId" }
+        - { $ref: "#/components/parameters/NexoraTimestamp" }
+        - { $ref: "#/components/parameters/NexoraNonce" }
+        - { $ref: "#/components/parameters/NexoraSignature" }
+      responses:
+        "200": { description: Current status, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandExecutionStatus" } } } }
+        "401": { description: Invalid signed request }
+        "404": { description: Not found, or device binding mismatch }
 components:
   parameters:
     DeviceId:
@@ -842,6 +1089,48 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    PrivilegedActionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RemoteCommandId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    # The signed Agent protocol (§Task010): every /v1/agent/remote-commands/*
+    # request carries these five headers over an agentBearer credential. There
+    # is no OpenAPI security-scheme construct for a canonical-request ECDSA
+    # signature, so the contract is documented as required headers instead.
+    NexoraSignatureVersion:
+      name: X-Nexora-Signature-Version
+      in: header
+      required: true
+      schema: { type: string, enum: [nexora-agent-sign-v1] }
+    NexoraKeyId:
+      name: X-Nexora-Key-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    NexoraTimestamp:
+      name: X-Nexora-Timestamp
+      in: header
+      required: true
+      description: Unix seconds; rejected if more than 300s from server time.
+      schema: { type: string }
+    NexoraNonce:
+      name: X-Nexora-Nonce
+      in: header
+      required: true
+      description: Single-use per device; a repeat is rejected as a replay.
+      schema: { type: string }
+    NexoraSignature:
+      name: X-Nexora-Signature
+      in: header
+      required: true
+      description: Base64 DER ECDSA P-256/SHA-256 signature over the canonical request.
+      schema: { type: string }
   securitySchemes:
     agentBearer:
       type: http

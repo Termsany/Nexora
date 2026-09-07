@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test": "DATABASE_URL=postgresql://test:test@localhost:5432/test node --experimental-strip-types --test ./src/lib/*.test.mjs ./src/telemetry/*.test.mjs ./src/alerts/*.test.mjs ./src/notifications/*.test.mjs ./src/software/*.test.mjs ./src/inventory/*.test.mjs ./src/security/*.test.mjs ./src/tenancy/*.test.mjs",
     "test:tenancy": "node --experimental-strip-types --test ./src/tenancy/*.integration.mjs",
+    "test:integration": "node --test ../../scripts/run-task010-test.mjs ../../scripts/run-task010-security-test.mjs ../../scripts/run-task010v-test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

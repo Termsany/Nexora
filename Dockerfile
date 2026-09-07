@@ -29,6 +29,9 @@ COPY --from=api-build /app/artifacts/api-server/dist ./dist
 EXPOSE 3001
 CMD ["node", "--enable-source-maps", "./dist/index.mjs"]
 
+FROM workspace AS integration
+CMD ["pnpm", "--filter", "@workspace/api-server", "run", "test:integration"]
+
 FROM workspace AS web-build
 
 ENV NODE_ENV=production

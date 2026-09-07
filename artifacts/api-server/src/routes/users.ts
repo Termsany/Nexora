@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, organizationMembershipsTable, organizationsTable, usersTable } from "@workspace/db";
 import { hashPassword } from "../auth/password.ts";
@@ -137,6 +137,18 @@ router.patch("/v1/admin/users/:user_id", async (req, res): Promise<void> => {
   if (parsed.data.status === "DISABLED" && context.userId === user.id) {
     res.status(403).json({ error: "You cannot disable your own account" });
     return;
+  }
+  // Disabling is the only way to remove a platform super admin's power (their
+  // role itself is not patchable), so the last active one must be protected
+  // the same way self-disable is: losing it would leave nobody able to
+  // administer users or organizations at all.
+  if (parsed.data.status === "DISABLED" && user.scope === "PLATFORM" && user.platformRole === "PLATFORM_SUPER_ADMIN") {
+    const activeSuperAdmins = await db.select({ id: usersTable.id }).from(usersTable)
+      .where(and(eq(usersTable.scope, "PLATFORM"), eq(usersTable.platformRole, "PLATFORM_SUPER_ADMIN"), eq(usersTable.status, "ACTIVE")));
+    if (activeSuperAdmins.length <= 1) {
+      res.status(403).json({ error: "Cannot disable the last active platform super admin" });
+      return;
+    }
   }
 
   const [updated] = await db.update(usersTable).set({
