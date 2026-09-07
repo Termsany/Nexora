@@ -6,7 +6,9 @@ on:
     paths:
       - "agent/**"
       - "scripts/windows/task010-runtime-validation.ps1"
+      - "scripts/windows/upgrade-agent.ps1"
       - "docs/task010-windows-runner.md"
+      - "docs/task010-agent-upgrade-runbook.md"
       - ".github/workflows/task010-windows-validation.yml"
 
 permissions:

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Minimal Windows Service used ONLY as test fixture material for the Task010 upgrade
+    acceptance tests (see ../Task010/AgentUpgradeAcceptanceTests.cs). It is published
+    repeatedly at different -p:Version values to stand in for "old" and "new" Agent
+    releases, so the upgrade-agent.ps1 tests can exercise a real Service Control Manager
+    lifecycle (stop/replace/start/rollback) without depending on Nexora.Agent's own
+    networking/enrollment behavior. It is never shipped and never referenced by the
+    product Agent.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>nexora-agent</AssemblyName>
+    <RootNamespace>Nexora.Agent.UpgradeTestStub</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>0.0.0</Version>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+  </ItemGroup>
+
+</Project>
