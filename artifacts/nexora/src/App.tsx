@@ -17,6 +17,7 @@ import Overview from '@/pages/overview';
 import Alerts from '@/pages/alerts';
 import Software from '@/pages/software';
 import Audit from '@/pages/audit';
+import Approvals from '@/pages/approvals';
 import {
   Route,
   Switch,
@@ -43,6 +44,7 @@ function Router() {
         <Route path="/patch-management" component={ComingSoon} />
         <Route path="/software" component={Software} />
         <Route path="/audit" component={Audit} />
+        <Route path="/security/approvals" component={Approvals} />
         <Route path="/network" component={ComingSoon} />
         <Route path="/tickets" component={ComingSoon} />
         <Route path="/reports" component={ComingSoon} />

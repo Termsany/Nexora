@@ -18,6 +18,7 @@ import {
   PanelLeftOpen,
   Settings2,
   ShieldCheck,
+  Shield,
   Ticket,
 } from 'lucide-react';
 import { useCapability, useOrganizationScope, useSession } from '@/lib/session';
@@ -30,6 +31,7 @@ const primaryNav = [
   { href: '/patch-management', label: 'Patch management', icon: ShieldCheck, soon: true },
   { href: '/software', label: 'Software', icon: Boxes },
   { href: '/audit', label: 'Audit log', icon: ClipboardList },
+  { href: '/security/approvals', label: 'Approvals', icon: Shield },
   { href: '/network', label: 'Network', icon: Network, soon: true },
   { href: '/tickets', label: 'Tickets', icon: Ticket, soon: true },
   { href: '/reports', label: 'Reports', icon: FileBarChart, soon: true },
@@ -82,12 +84,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { session, logout } = useSession();
   const canAdministerTenancy = useCapability('membership:read');
   const canReadAudit = useCapability('audit:read');
+  const canReadApprovals = useCapability('privileged_actions.request');
   // Platform staff always navigate organizations; an organization user sees the
   // entry only when their role gives them something to administer there.
   const showOrganizations = Boolean(session?.platform_access) || canAdministerTenancy;
   const navItems = (showOrganizations
     ? [primaryNav[0]!, { href: '/organizations', label: 'Organizations', icon: Building2 }, ...primaryNav.slice(1)]
-    : primaryNav).filter((item) => item.href !== '/audit' || canReadAudit);
+    : primaryNav).filter((item) => (item.href !== '/audit' || canReadAudit) && (item.href !== '/security/approvals' || canReadApprovals));
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
