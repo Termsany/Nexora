@@ -42,6 +42,10 @@ services:
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?ADMIN_API_TOKEN is required}
       ONLINE_THRESHOLD_SECONDS: ${ONLINE_THRESHOLD_SECONDS:-90}
       OFFLINE_THRESHOLD_SECONDS: ${OFFLINE_THRESHOLD_SECONDS:-120}
+      # Global kill switch for the Task010 remote command engine. Defaults to
+      # false so an unset environment leaves execution disabled; the API treats
+      # anything other than the exact string "true" as disabled.
+      REMOTE_COMMANDS_ENABLED: ${REMOTE_COMMANDS_ENABLED:-false}
       TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}

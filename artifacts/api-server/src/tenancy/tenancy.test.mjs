@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { can, organizationScope, reachesOrganization, tenantSqlClause } from "./policy.ts";
+import { can, hasPermission, organizationScope, reachesOrganization, tenantSqlClause } from "./policy.ts";
 
 const ORG_A = "11111111-1111-4111-8111-111111111111";
 const ORG_B = "22222222-2222-4222-8222-222222222222";
@@ -135,4 +135,33 @@ test("a membership-less context is denied every capability", () => {
     assert.equal(can(orphan, capability), false, `${capability} must be denied without any membership`);
     assert.equal(can(orphan, capability, ORG_A), false, `${capability} must be denied for a specific organization too`);
   }
+});
+
+/**
+ * Task010A-F: the per-device remote command gate is an administrative security
+ * control, so `remote_commands.manage` is deliberately narrower than the
+ * `remote_commands.request` permission a technician already holds.
+ */
+test("remote_commands.manage is restricted to administrative roles", () => {
+  const orgAdmin = organizationContext("ORGANIZATION_ADMIN");
+  assert.equal(hasPermission(orgAdmin, "remote_commands.manage", ORG_A), true);
+
+  for (const role of ["ORGANIZATION_TECHNICIAN", "ORGANIZATION_VIEWER"]) {
+    const context = organizationContext(role);
+    assert.equal(hasPermission(context, "remote_commands.manage", ORG_A), false, `${role} must not manage the gate`);
+  }
+
+  // A technician may still request a command; only the gate itself is withheld.
+  assert.equal(hasPermission(organizationContext("ORGANIZATION_TECHNICIAN"), "remote_commands.request", ORG_A), true);
+
+  assert.equal(hasPermission(platformContext("PLATFORM_ADMIN"), "remote_commands.manage"), true);
+  assert.equal(hasPermission(platformContext("PLATFORM_SUPER_ADMIN"), "remote_commands.manage"), true);
+  assert.equal(hasPermission(platformContext("PLATFORM_TECHNICIAN"), "remote_commands.manage"), false);
+});
+
+test("remote_commands.manage does not leak across organizations", () => {
+  const orgAdmin = organizationContext("ORGANIZATION_ADMIN", ORG_A);
+  assert.equal(hasPermission(orgAdmin, "remote_commands.manage", ORG_A), true);
+  assert.equal(hasPermission(orgAdmin, "remote_commands.manage", ORG_B), false);
+  assert.equal(hasPermission(orphanContext(), "remote_commands.manage", ORG_A), false);
 });

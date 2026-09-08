@@ -550,6 +550,35 @@ paths:
         "403": { description: Insufficient permissions }
         "404": { description: Device not found }
         "422": { description: Site does not belong to the device's organization }
+  /v1/devices/{device_id}/remote-commands:
+    patch:
+      operationId: setDeviceRemoteCommands
+      tags: [remote-commands]
+      summary: Enable or disable remote command execution for a single device
+      description: >
+        Sets the per-device remote command gate. Execution additionally requires
+        the global REMOTE_COMMANDS_ENABLED switch, so enabling a device here is
+        necessary but never sufficient. Requires the remote_commands.manage
+        permission in the device's organization. Idempotent: re-sending the
+        current value returns changed=false and writes no audit event. Devices
+        outside the caller's tenant scope return 404 rather than 403.
+      security: [{ sessionCookie: [] }, { adminBearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetDeviceRemoteCommandsInput" }
+      responses:
+        "200":
+          description: Device remote command gate state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceRemoteCommandGate" }
+        "400": { description: enabled must be a boolean }
+        "403": { description: Insufficient permissions }
+        "404": { description: Device not found }
   /v1/devices/{device_id}/metrics:
     get:
       operationId: getDeviceMetrics
@@ -1322,6 +1351,25 @@ components:
         id: { type: string, format: uuid }
         organization_id: { type: string, format: uuid }
         site_id: { type: [string, "null"], format: uuid }
+    SetDeviceRemoteCommandsInput:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+          description: >
+            Whether this device may execute remote commands. Execution also
+            requires the global REMOTE_COMMANDS_ENABLED switch, so enabling a
+            device is necessary but not sufficient.
+    DeviceRemoteCommandGate:
+      type: object
+      required: [device_id, remote_commands_enabled, changed]
+      properties:
+        device_id: { type: string, format: uuid }
+        remote_commands_enabled: { type: boolean }
+        changed:
+          type: boolean
+          description: False when the device already held the requested value; no audit event is written in that case.
     Membership:
       type: object
       required: [id, user_id, role]

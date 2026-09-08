@@ -58,6 +58,7 @@ export const PERMISSIONS = [
   "security.sessions.revoke", "privileged_actions.request", "privileged_actions.approve",
   "privileged_actions.execute",
   "remote_commands.read", "remote_commands.request", "remote_commands.cancel",
+  "remote_commands.manage",
 ] as const;
 export type Permission = typeof PERMISSIONS[number];
 
@@ -102,12 +103,12 @@ const READ_PERMISSIONS: Permission[] = [
 export const ORGANIZATION_ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> = {
   ORGANIZATION_VIEWER: [...READ_PERMISSIONS, "security.sessions.read", "security.sessions.revoke"],
   ORGANIZATION_TECHNICIAN: [...READ_PERMISSIONS, "devices.manage", "alerts.acknowledge", "enrollment_tokens.read", "notifications.read", "audit.read", "security.sessions.read", "security.sessions.revoke", "privileged_actions.request", "remote_commands.read", "remote_commands.request", "remote_commands.cancel"],
-  ORGANIZATION_ADMIN: [...READ_PERMISSIONS, "organizations.manage", "sites.manage", "devices.manage", "alerts.acknowledge", "members.read", "members.manage", "enrollment_tokens.read", "enrollment_tokens.create", "enrollment_tokens.revoke", "notifications.read", "audit.read", "security.sessions.read", "security.sessions.revoke", "privileged_actions.request", "privileged_actions.approve", "privileged_actions.execute", "remote_commands.read", "remote_commands.request", "remote_commands.cancel"],
+  ORGANIZATION_ADMIN: [...READ_PERMISSIONS, "organizations.manage", "sites.manage", "devices.manage", "alerts.acknowledge", "members.read", "members.manage", "enrollment_tokens.read", "enrollment_tokens.create", "enrollment_tokens.revoke", "notifications.read", "audit.read", "security.sessions.read", "security.sessions.revoke", "privileged_actions.request", "privileged_actions.approve", "privileged_actions.execute", "remote_commands.read", "remote_commands.request", "remote_commands.cancel", "remote_commands.manage"],
 };
 
 export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, readonly Permission[]> = {
   PLATFORM_TECHNICIAN: [...READ_PERMISSIONS, "devices.manage", "alerts.acknowledge", "notifications.read", "audit.read", "security.sessions.read", "security.sessions.revoke", "privileged_actions.request"],
-  PLATFORM_ADMIN: [...READ_PERMISSIONS, "organizations.manage", "sites.manage", "devices.manage", "alerts.acknowledge", "members.read", "members.manage", "enrollment_tokens.read", "enrollment_tokens.create", "enrollment_tokens.revoke", "notifications.read", "notifications.manage", "audit.read", "security.sessions.read", "security.sessions.revoke", "privileged_actions.request", "privileged_actions.approve"],
+  PLATFORM_ADMIN: [...READ_PERMISSIONS, "organizations.manage", "sites.manage", "devices.manage", "alerts.acknowledge", "members.read", "members.manage", "enrollment_tokens.read", "enrollment_tokens.create", "enrollment_tokens.revoke", "notifications.read", "notifications.manage", "audit.read", "security.sessions.read", "security.sessions.revoke", "privileged_actions.request", "privileged_actions.approve", "remote_commands.manage"],
   PLATFORM_SUPER_ADMIN: PERMISSIONS,
 };
 

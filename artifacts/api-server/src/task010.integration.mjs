@@ -189,3 +189,157 @@ test("Task010 acceptance: signed status polling and terminal result idempotency 
   const retry = await call("POST", `/v1/agent/remote-commands/${job.id}/result`, { cookies: false, body: result, headers: signedHeaders("POST", `/v1/agent/remote-commands/${job.id}/result`, resultBody) });
   assert.equal(retry.status, 200, "an identical terminal result with a fresh signed request is idempotent");
 });
+
+/* ------------------------------------------------------------------------- *
+ * Task010A-F: PATCH /v1/devices/:device_id/remote-commands
+ *
+ * The per-device gate previously had no supported write path, which left the
+ * pilot unable to be enabled through the application at all. These tests cover
+ * the endpoint's own contract and its interaction with the two-gate promotion
+ * rule in security.ts.
+ * ------------------------------------------------------------------------- */
+
+const af = {
+  orgB: crypto.randomUUID(), deviceB: crypto.randomUUID(),
+  technician: crypto.randomUUID(), approver: crypto.randomUUID(),
+};
+let afTechSession = null;
+
+async function loginAs(email) {
+  const response = await call("POST", "/v1/auth/login", { cookies: false, body: { email, password } });
+  assert.equal(response.status, 200, `login failed for ${email}`);
+  const setCookie = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie().join(";") : (response.headers.get("set-cookie") ?? "");
+  return { cookie: `${/nexora_session=([^;]+)/.exec(setCookie)?.[0] ?? ""}; nexora_csrf=${response.body.csrf_token}`, csrf: response.body.csrf_token };
+}
+
+function gate(enabled, { cookie = sessionCookie, token = csrf, device = ids.device } = {}) {
+  const headers = { origin: "http://127.0.0.1" };
+  if (token !== null) headers["x-csrf-token"] = token;
+  if (cookie !== null) headers.cookie = cookie;
+  return call("PATCH", `/v1/devices/${device}/remote-commands`, { cookies: false, body: { enabled }, headers });
+}
+
+async function gateAudits() {
+  const { rows } = await pool.query(
+    "SELECT actor_user_id, organization_id, target_type, target_id, metadata, request_id, created_at FROM nexora_audit_log WHERE action='DEVICE_REMOTE_COMMANDS_CHANGED' AND target_id=$1 ORDER BY created_at",
+    [ids.device],
+  );
+  return rows;
+}
+
+test("Task010A-F: gate fixtures (second tenant, technician, approver)", async () => {
+  const passwordHash = await hashPassword(password);
+  await pool.query("INSERT INTO nexora_organizations(id,name,slug) VALUES ($1,$2,$3)", [af.orgB, "Task010AF Other", `task010af-${af.orgB}`]);
+  await pool.query("INSERT INTO nexora_devices(id,agent_id,device_uuid,hostname,organization_id,remote_commands_enabled,capabilities) VALUES ($1,$2,$3,'TASK010AF-OTHER',$4,false,'[\"remote_command_v1\"]')", [af.deviceB, `TASK010AF-${af.deviceB}`, crypto.randomUUID(), af.orgB]);
+  await pool.query("INSERT INTO nexora_users(id,email,name,password_hash,scope,platform_role) VALUES ($1,$2,'AF Technician',$3,'ORGANIZATION',NULL)", [af.technician, `af-tech-${af.technician}@test.invalid`, passwordHash]);
+  await pool.query("INSERT INTO nexora_organization_memberships(user_id,organization_id,role) VALUES ($1,$2,'ORGANIZATION_TECHNICIAN')", [af.technician, ids.org]);
+  await pool.query("INSERT INTO nexora_users(id,email,name,password_hash,scope,platform_role) VALUES ($1,$2,'AF Approver',$3,'ORGANIZATION',NULL)", [af.approver, `af-approver-${af.approver}@test.invalid`, passwordHash]);
+  await pool.query("INSERT INTO nexora_organization_memberships(user_id,organization_id,role) VALUES ($1,$2,'ORGANIZATION_ADMIN')", [af.approver, ids.org]);
+  afTechSession = await loginAs(`af-tech-${af.technician}@test.invalid`);
+});
+
+test("Task010A-F: the device gate rejects unauthenticated callers", async () => {
+  const response = await gate(false, { cookie: null, token: null });
+  assert.equal(response.status, 401);
+});
+
+test("Task010A-F: the device gate requires CSRF for a browser session", async () => {
+  const response = await gate(false, { token: null });
+  assert.equal(response.status, 403, "a session cookie without the CSRF header must be refused");
+  const { rows } = await pool.query("SELECT remote_commands_enabled FROM nexora_devices WHERE id=$1", [ids.device]);
+  assert.equal(rows[0].remote_commands_enabled, true, "a CSRF failure must not change the gate");
+});
+
+test("Task010A-F: a technician cannot manage the device gate", async () => {
+  const response = await gate(false, { cookie: afTechSession.cookie, token: afTechSession.csrf });
+  assert.equal(response.status, 403, "remote_commands.manage is narrower than remote_commands.request");
+  const { rows } = await pool.query("SELECT remote_commands_enabled FROM nexora_devices WHERE id=$1", [ids.device]);
+  assert.equal(rows[0].remote_commands_enabled, true);
+});
+
+test("Task010A-F: another tenant's device is indistinguishable from a missing one", async () => {
+  const response = await gate(true, { device: af.deviceB });
+  assert.equal(response.status, 404, "cross-tenant access must 404, never 403, so device ids cannot be probed");
+  const { rows } = await pool.query("SELECT remote_commands_enabled FROM nexora_devices WHERE id=$1", [af.deviceB]);
+  assert.equal(rows[0].remote_commands_enabled, false, "the other tenant's device must be untouched");
+});
+
+test("Task010A-F: an organization admin can disable the gate, and it is audited", async () => {
+  const before = (await gateAudits()).length;
+  const response = await gate(false);
+  assert.equal(response.status, 200);
+  assert.equal(response.body.remote_commands_enabled, false);
+  assert.equal(response.body.changed, true);
+
+  const rows = await gateAudits();
+  assert.equal(rows.length, before + 1, "a state change writes exactly one audit event");
+  const entry = rows[rows.length - 1];
+  assert.equal(entry.actor_user_id, ids.user);
+  assert.equal(entry.organization_id, ids.org);
+  assert.equal(entry.target_type, "device");
+  assert.equal(entry.target_id, ids.device);
+  assert.equal(entry.metadata.previous_value, true);
+  assert.equal(entry.metadata.new_value, false);
+  assert.ok(entry.request_id, "the audit entry carries the request id");
+  assert.ok(!JSON.stringify(entry.metadata).toLowerCase().includes("password"), "audit metadata carries no secrets");
+});
+
+test("Task010A-F: re-sending the current value is idempotent and writes no audit event", async () => {
+  const before = (await gateAudits()).length;
+  const response = await gate(false);
+  assert.equal(response.status, 200);
+  assert.equal(response.body.remote_commands_enabled, false);
+  assert.equal(response.body.changed, false, "a no-op reports changed=false");
+  assert.equal((await gateAudits()).length, before, "a no-op writes no audit event");
+});
+
+test("Task010A-F: approval does not promote a job to READY while the device gate is off", async () => {
+  const actionId = crypto.randomUUID(); const jobId = crypto.randomUUID();
+  const expires = new Date(Date.now() + 15 * 60 * 1000);
+  await pool.query("INSERT INTO nexora_privileged_actions(id,organization_id,device_id,action_type,status,requested_by,expires_at,request_reason,safe_parameters) VALUES ($1,$2,$3,'REMOTE_COMMAND','PENDING_APPROVAL',$4,$5,'Task010A-F gate','{}')", [actionId, ids.org, ids.device, ids.user, expires]);
+  await pool.query("INSERT INTO nexora_remote_command_jobs(id,organization_id,device_id,privileged_action_id,status,shell_type,command_payload,timeout_seconds,requested_by_user_id,expires_at) VALUES ($1,$2,$3,$4,'PENDING','CMD',$5,60,$6,$7)", [jobId, ids.org, ids.device, actionId, JSON.stringify({ shell: "CMD", command: "hostname" }), ids.user, expires]);
+
+  const approver = await loginAs(`af-approver-${af.approver}@test.invalid`);
+  const response = await call("POST", `/v1/privileged-actions/${actionId}/approve`, { cookies: false, headers: { origin: "http://127.0.0.1", "x-csrf-token": approver.csrf, cookie: approver.cookie } });
+  assert.equal(response.status, 200, "a separate approver satisfies two-person approval");
+
+  const { rows } = await pool.query("SELECT status FROM nexora_remote_command_jobs WHERE id=$1", [jobId]);
+  assert.equal(rows[0].status, "PENDING", "the device gate being off must leave the job unpromoted");
+  await pool.query("DELETE FROM nexora_remote_command_jobs WHERE id=$1", [jobId]);
+  await pool.query("DELETE FROM nexora_privileged_actions WHERE id=$1", [actionId]);
+});
+
+test("Task010A-F: approval promotes to READY once both gates are on", async () => {
+  const enable = await gate(true);
+  assert.equal(enable.status, 200); assert.equal(enable.body.changed, true);
+
+  const actionId = crypto.randomUUID(); const jobId = crypto.randomUUID();
+  const expires = new Date(Date.now() + 15 * 60 * 1000);
+  await pool.query("INSERT INTO nexora_privileged_actions(id,organization_id,device_id,action_type,status,requested_by,expires_at,request_reason,safe_parameters) VALUES ($1,$2,$3,'REMOTE_COMMAND','PENDING_APPROVAL',$4,$5,'Task010A-F gate','{}')", [actionId, ids.org, ids.device, ids.user, expires]);
+  await pool.query("INSERT INTO nexora_remote_command_jobs(id,organization_id,device_id,privileged_action_id,status,shell_type,command_payload,timeout_seconds,requested_by_user_id,expires_at) VALUES ($1,$2,$3,$4,'PENDING','CMD',$5,60,$6,$7)", [jobId, ids.org, ids.device, actionId, JSON.stringify({ shell: "CMD", command: "hostname" }), ids.user, expires]);
+
+  const approver = await loginAs(`af-approver-${af.approver}@test.invalid`);
+  const response = await call("POST", `/v1/privileged-actions/${actionId}/approve`, { cookies: false, headers: { origin: "http://127.0.0.1", "x-csrf-token": approver.csrf, cookie: approver.cookie } });
+  assert.equal(response.status, 200);
+
+  const { rows } = await pool.query("SELECT status FROM nexora_remote_command_jobs WHERE id=$1", [jobId]);
+  assert.equal(rows[0].status, "READY", "both gates on promotes the job");
+  await pool.query("DELETE FROM nexora_remote_command_jobs WHERE id=$1", [jobId]);
+  await pool.query("DELETE FROM nexora_privileged_actions WHERE id=$1", [actionId]);
+});
+
+test("Task010A-F: the requester still cannot approve their own action", async () => {
+  const actionId = crypto.randomUUID();
+  const expires = new Date(Date.now() + 15 * 60 * 1000);
+  await pool.query("INSERT INTO nexora_privileged_actions(id,organization_id,device_id,action_type,status,requested_by,expires_at,request_reason,safe_parameters) VALUES ($1,$2,$3,'REMOTE_COMMAND','PENDING_APPROVAL',$4,$5,'Task010A-F separation','{}')", [actionId, ids.org, ids.device, ids.user, expires]);
+  const response = await call("POST", `/v1/privileged-actions/${actionId}/approve`, { cookies: false, headers: { origin: "http://127.0.0.1", "x-csrf-token": csrf, cookie: sessionCookie } });
+  assert.equal(response.status, 403, "two-person approval is unchanged by the new gate");
+  await pool.query("DELETE FROM nexora_privileged_actions WHERE id=$1", [actionId]);
+});
+
+test("Task010A-F: gate fixture cleanup", async () => {
+  await pool.query("DELETE FROM nexora_organization_memberships WHERE user_id = ANY($1)", [[af.technician, af.approver]]);
+  await pool.query("DELETE FROM nexora_users WHERE id = ANY($1)", [[af.technician, af.approver]]);
+  await pool.query("DELETE FROM nexora_devices WHERE id=$1", [af.deviceB]);
+  await pool.query("DELETE FROM nexora_organizations WHERE id=$1", [af.orgB]);
+});

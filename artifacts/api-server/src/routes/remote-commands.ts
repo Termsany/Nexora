@@ -6,6 +6,7 @@ import { canonicalAgentRequest, verifyAgentSignature } from "../security/agent-s
 import { z } from "zod";
 import { requirePermission, requireTenantContext } from "../tenancy/context.ts";
 import { hasPermission, organizationScope } from "../tenancy/policy.ts";
+import { findDeviceInScope } from "../tenancy/scope.ts";
 import { recordAudit } from "../tenancy/audit.ts";
 
 const router: IRouter = Router();
@@ -84,6 +85,48 @@ router.post("/v1/agent/remote-commands/:id/status", async (req, res) => {
   const parsed = uuid.safeParse(req.params.id); if (!parsed.success) { res.status(404).json({ error: "Not found" }); return; }
   const [job] = await db.select({ id: remoteCommandJobsTable.id, status: remoteCommandJobsTable.status, cancelRequestedAt: remoteCommandJobsTable.cancelRequestedAt }).from(remoteCommandJobsTable).where(and(eq(remoteCommandJobsTable.id, parsed.data), eq(remoteCommandJobsTable.deviceId, device.id)));
   if (!job) { res.status(404).json({ error: "Not found" }); return; } res.json({ status: job.status, cancel_requested: Boolean(job.cancelRequestedAt) });
+});
+
+/**
+ * Per-device remote command gate.
+ *
+ * Execution requires BOTH this device flag and the global REMOTE_COMMANDS_ENABLED
+ * switch (see the claim endpoint above and the approval promotion in security.ts),
+ * so enabling a device here is necessary but never sufficient on its own. The
+ * device is resolved through the tenant scope first, so a device belonging to
+ * another organization is indistinguishable from one that does not exist (404,
+ * never 403) and the endpoint cannot be used to probe for device ids.
+ *
+ * Idempotent: re-sending the current value succeeds with `changed: false` and
+ * writes neither a row update nor an audit event, because nothing changed.
+ */
+router.patch("/v1/devices/:device_id/remote-commands", requireTenantContext, async (req, res): Promise<void> => {
+  const context = req.tenant!;
+  const params = z.object({ device_id: uuid }).safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: "device_id must be a UUID" }); return; }
+  const device = await findDeviceInScope(context, params.data.device_id);
+  if (!device) { res.status(404).json({ error: "Device not found" }); return; }
+  if (!hasPermission(context, "remote_commands.manage", device.organizationId)) {
+    res.status(403).json({ error: "Insufficient permissions" }); return;
+  }
+  const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "enabled must be a boolean" }); return; }
+
+  const previous = device.remoteCommandsEnabled;
+  if (previous === parsed.data.enabled) {
+    res.json({ device_id: device.id, remote_commands_enabled: previous, changed: false });
+    return;
+  }
+  const [updated] = await db.update(devicesTable)
+    .set({ remoteCommandsEnabled: parsed.data.enabled, updatedAt: new Date() })
+    .where(eq(devicesTable.id, device.id))
+    .returning();
+  await recordAudit({
+    action: "DEVICE_REMOTE_COMMANDS_CHANGED", context, organizationId: device.organizationId,
+    targetType: "device", targetId: device.id, req,
+    metadata: { hostname: device.hostname, agent_id: device.agentId, previous_value: previous, new_value: parsed.data.enabled },
+  });
+  res.json({ device_id: updated!.id, remote_commands_enabled: updated!.remoteCommandsEnabled, changed: true });
 });
 
 router.post("/v1/remote-commands", requireTenantContext, requirePermission("remote_commands.request"), async (req, res): Promise<void> => {
