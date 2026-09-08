@@ -293,7 +293,20 @@ public sealed class AgentUpgradeAcceptanceTests : IDisposable
 
     private static void InstallAndStartService(string exePath)
     {
-        RunPs($"New-Service -Name '{ServiceName}' -BinaryPathName '\"{exePath}\"' -DisplayName 'Nexora Agent Test' -StartupType Automatic | Out-Null; Start-Service -Name '{ServiceName}'; (Get-Service -Name '{ServiceName}').WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Running, [TimeSpan]::FromSeconds(30))");
+        // Install the fixture at the same authoritative path enforced by upgrade-agent.ps1.
+        // Previously the service pointed at a temp publish directory, leaving Program Files
+        // empty and bypassing the pre-mutation downgrade guard.
+        var sourceDirectory = Path.GetDirectoryName(exePath)!;
+        Directory.CreateDirectory(InstallPath);
+        foreach (var file in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(sourceDirectory, file);
+            var destination = Path.Combine(InstallPath, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(file, destination, overwrite: true);
+        }
+        var installedExe = Path.Combine(InstallPath, "nexora-agent.exe");
+        RunPs($"New-Service -Name '{ServiceName}' -BinaryPathName '\"{installedExe}\"' -DisplayName 'Nexora Agent Test' -StartupType Automatic | Out-Null; Start-Service -Name '{ServiceName}'; (Get-Service -Name '{ServiceName}').WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Running, [TimeSpan]::FromSeconds(30))");
     }
 
     private static void SeedProgramData(out Guid deviceId, out byte[] credentialsBytes)
