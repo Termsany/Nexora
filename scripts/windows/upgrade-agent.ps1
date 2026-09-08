@@ -120,13 +120,17 @@ if (-not (Test-Path -LiteralPath (Join-Path $staging 'nexora-agent.exe'))) { thr
 if (-not (Test-Path -LiteralPath (Join-Path $staging 'nexora-agent.dll'))) { throw 'Resolved release looks like an apphost only, not the complete self-contained folder (missing nexora-agent.dll).' }
 if (-not (Get-ChildItem -LiteralPath $staging -Filter '*.deps.json' -ErrorAction SilentlyContinue)) { throw 'Resolved release is missing *.deps.json; incomplete self-contained publish.' }
 
-$sourceProductVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $staging 'nexora-agent.exe')).ProductVersion
+$sourceInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $staging 'nexora-agent.exe'))
+$sourceProductVersion = $sourceInfo.ProductVersion
 if (-not $sourceProductVersion -or $sourceProductVersion -notlike "$TargetVersion*") { throw "Resolved release version is '$sourceProductVersion', expected $TargetVersion." }
-$sourceFileVersion = Get-CleanVersion ([Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $staging 'nexora-agent.exe')).FileVersion)
+$sourceFileVersion = Get-CleanVersion ($sourceInfo.ProductVersion)
+if (-not $sourceFileVersion) { $sourceFileVersion = Get-CleanVersion $sourceInfo.FileVersion }
 
 $currentExe = Join-Path $resolvedInstall 'nexora-agent.exe'
 if (Test-Path -LiteralPath $currentExe) {
-    $currentFileVersion = Get-CleanVersion ([Diagnostics.FileVersionInfo]::GetVersionInfo($currentExe).FileVersion)
+    $currentInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($currentExe)
+    $currentFileVersion = Get-CleanVersion $currentInfo.ProductVersion
+    if (-not $currentFileVersion) { $currentFileVersion = Get-CleanVersion $currentInfo.FileVersion }
     if ($currentFileVersion -and $sourceFileVersion -and $sourceFileVersion -lt $currentFileVersion) {
         throw "Refusing downgrade: installed version $currentFileVersion is newer than release version $sourceFileVersion."
     }

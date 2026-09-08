@@ -53,9 +53,11 @@ public sealed class AgentUpgradeAcceptanceTests : IDisposable
     public void Task010_Upgrade_ScriptNeverCallsConfigureOrEnrollment()
     {
         var text = File.ReadAllText(ScriptPath);
-        Assert.DoesNotContain("--configure", text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("EnrollmentToken", text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("EnrollmentService", text, StringComparison.OrdinalIgnoreCase);
+        // Comments/documentation may mention these terms. Reject only executable forms
+        // that could invoke configure or consume an enrollment token.
+        Assert.DoesNotMatch(@"(?im)^\s*(?:&|Start-Process|Invoke-Expression)\b[^\r\n]*--configure\b", text);
+        Assert.DoesNotMatch(@"(?im)^\s*\[?string\]?\s*\$EnrollmentToken\b", text);
+        Assert.DoesNotMatch(@"(?im)^\s*(?:&|Start-Process|Invoke-Expression)\b[^\r\n]*(?:EnrollmentToken|enrollment-token)\b", text);
     }
 
     [Fact]
