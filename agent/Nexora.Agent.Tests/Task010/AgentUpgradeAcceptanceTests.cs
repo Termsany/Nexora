@@ -127,6 +127,14 @@ public sealed class AgentUpgradeAcceptanceTests : IDisposable
         SeedProgramData(out var deviceId, out var credentialsBytes);
 
         var v030ForDowngrade = await PublishStubAsync("0.3.0", crash: false);
+        var installedMetadata = FileVersionInfo.GetVersionInfo(Path.Combine(InstallPath, "nexora-agent.exe"));
+        var candidateMetadata = FileVersionInfo.GetVersionInfo(Path.Combine(v030ForDowngrade, "nexora-agent.exe"));
+        var installedVersion = ParseVersion(installedMetadata.ProductVersion, installedMetadata.FileVersion);
+        var candidateVersion = ParseVersion(candidateMetadata.ProductVersion, candidateMetadata.FileVersion);
+        Assert.NotNull(installedVersion);
+        Assert.NotNull(candidateVersion);
+        Assert.True(candidateVersion < installedVersion,
+            $"Fixture is not a downgrade: installed ProductVersion={installedMetadata.ProductVersion}, FileVersion={installedMetadata.FileVersion}; candidate ProductVersion={candidateMetadata.ProductVersion}, FileVersion={candidateMetadata.FileVersion}");
         var downgradeResult = RunUpgradeScript("-SourcePath", v030ForDowngrade, "-TargetVersion", "0.3.0");
         Assert.NotEqual(0, downgradeResult.ExitCode);
         Assert.Contains("downgrade", downgradeResult.StdErr, StringComparison.OrdinalIgnoreCase);
@@ -271,6 +279,7 @@ public sealed class AgentUpgradeAcceptanceTests : IDisposable
         psi.ArgumentList.Add("-o");
         psi.ArgumentList.Add(output);
         psi.ArgumentList.Add($"-p:Version={version}");
+        psi.ArgumentList.Add($"-p:AssemblyVersion={version}.0");
         psi.ArgumentList.Add($"-p:InformationalVersion={version}");
         psi.ArgumentList.Add($"-p:FileVersion={version}.0");
         if (crash) psi.ArgumentList.Add("-p:DefineConstants=CRASH_ON_START");
@@ -340,6 +349,14 @@ public sealed class AgentUpgradeAcceptanceTests : IDisposable
         process.WaitForExit();
         if (process.ExitCode != 0) throw new InvalidOperationException($"PowerShell command failed ({process.ExitCode}): {command}\n{stdout}\n{stderr}");
         return stdout;
+    }
+
+    private static Version? ParseVersion(string? productVersion, string? fileVersion)
+    {
+        var value = productVersion ?? fileVersion;
+        if (string.IsNullOrWhiteSpace(value)) value = fileVersion;
+        var match = System.Text.RegularExpressions.Regex.Match(value ?? string.Empty, @"^\d+(\.\d+){1,3}");
+        return match.Success ? Version.Parse(match.Value) : null;
     }
 
     private static void RemoveServiceAndStateIfPresent()
