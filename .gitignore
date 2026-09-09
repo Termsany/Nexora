@@ -61,3 +61,8 @@ node_modules/
 # PKI material must never enter git - CA/server keys live at /etc/nexora/pki/ on the host
 *.key
 *.pem
+
+# Local package/build artifacts
+.pnpm-store/
+agent/**/bin/
+agent/**/obj/
