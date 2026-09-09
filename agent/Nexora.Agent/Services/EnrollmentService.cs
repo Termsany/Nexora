@@ -9,7 +9,18 @@ public sealed class EnrollmentService(IdentityService identity, SecureStorageSer
     public async Task<StoredCredentials> EnsureEnrolledAsync(CancellationToken cancellationToken)
     {
         var stored = await storage.LoadAsync(cancellationToken);
-        if (!string.IsNullOrWhiteSpace(stored?.AgentToken)) { var ensured = await signing.EnsureKeyAsync(stored, cancellationToken); if (ensured.Credentials.SigningKeyId is null) { var registered = await api.RegisterSigningKeyAsync(stored.AgentToken!, ensured.Credentials.SigningPublicKey!, cancellationToken); var updated = ensured.Credentials with { SigningKeyId = registered.KeyId }; await storage.SaveAsync(updated, cancellationToken); } return ensured.Credentials; }
+        if (!string.IsNullOrWhiteSpace(stored?.AgentToken))
+        {
+            var ensured = await signing.EnsureKeyAsync(stored, cancellationToken);
+            if (ensured.Credentials.SigningKeyId is null)
+            {
+                var registered = await api.RegisterSigningKeyAsync(stored.AgentToken!, ensured.Credentials.SigningPublicKey!, cancellationToken);
+                var updated = ensured.Credentials with { SigningKeyId = registered.KeyId };
+                await storage.SaveAsync(updated, cancellationToken);
+                return updated;
+            }
+            return ensured.Credentials;
+        }
         var enrollmentToken = stored?.EnrollmentToken ?? options.EnrollmentToken;
         if (string.IsNullOrWhiteSpace(enrollmentToken)) throw new InvalidOperationException("No enrollment token is configured");
 

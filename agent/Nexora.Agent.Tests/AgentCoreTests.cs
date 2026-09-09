@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Win32;
 using Nexora.Agent.Collectors;
+using Nexora.Agent.Configuration;
 using Nexora.Agent.Models;
 using Nexora.Agent.Security;
 using Nexora.Agent.Services;
@@ -134,6 +135,34 @@ public sealed class AgentCoreTests
             await storage.SaveAsync(expected, CancellationToken.None);
             Assert.Equal(expected, await storage.LoadAsync(CancellationToken.None));
             Assert.DoesNotContain("secret", await File.ReadAllTextAsync(path));
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public async Task ExistingCredentialsReturnRegisteredSigningKeyId()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"nexora-tests-{Guid.NewGuid():N}");
+        var path = Path.Combine(directory, "credentials.dat");
+        try
+        {
+            var storage = new SecureStorageService(new ReversingProtector(), path);
+            var stored = new StoredCredentials("device", "agent", null, "token");
+            await storage.SaveAsync(stored, CancellationToken.None);
+            var handler = new StubHandler("{\"key_id\":\"signing-key\",\"key_fingerprint\":\"fingerprint\",\"status\":\"ACTIVE\"}");
+            var api = new NexoraApiClient(new HttpClient(handler) { BaseAddress = new Uri("https://nexora.example/api/") });
+            var service = new EnrollmentService(
+                new IdentityService(NullLogger<IdentityService>.Instance, Path.Combine(directory, "device-id")),
+                storage,
+                new AgentSigningService(storage),
+                api,
+                new AgentOptions("https://nexora.example/api", null),
+                NullLogger<EnrollmentService>.Instance);
+
+            var credentials = await service.EnsureEnrolledAsync(CancellationToken.None);
+
+            Assert.Equal("signing-key", credentials.SigningKeyId);
+            Assert.Equal("signing-key", (await storage.LoadAsync(CancellationToken.None))!.SigningKeyId);
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
