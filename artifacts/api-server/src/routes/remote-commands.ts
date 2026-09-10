@@ -8,13 +8,31 @@ import { requirePermission, requireTenantContext } from "../tenancy/context.ts";
 import { hasPermission, organizationScope } from "../tenancy/policy.ts";
 import { findDeviceInScope } from "../tenancy/scope.ts";
 import { recordAudit } from "../tenancy/audit.ts";
+import { canManageRemoteCommandsGate, remoteCommandsEnabled, setRemoteCommandsEnabled } from "../security/remote-command-gate.ts";
 
 const router: IRouter = Router();
 const uuid = z.string().uuid();
-const enabled = () => process.env.REMOTE_COMMANDS_ENABLED === "true";
+const enabled = remoteCommandsEnabled;
 const commandSchema = z.object({ device_id: uuid, shell: z.enum(["CMD", "POWERSHELL"]), command: z.string().trim().min(1).max(64 * 1024), timeout_seconds: z.coerce.number().int().min(1).max(900).default(60), reason: z.string().trim().min(1).max(1000), working_directory: z.string().max(260).optional() });
+
+router.get("/v1/remote-commands/gate", requireTenantContext, async (req, res): Promise<void> => {
+  const context = req.tenant!;
+  if (!context.platformAccess && !hasPermission(context, "remote_commands.request")) { res.status(403).json({ error: "Insufficient permissions" }); return; }
+  res.json({ enabled: remoteCommandsEnabled() });
+});
+
+router.patch("/v1/remote-commands/gate", requireTenantContext, async (req, res): Promise<void> => {
+  const context = req.tenant!;
+  if (!canManageRemoteCommandsGate(context)) { res.status(403).json({ error: "Insufficient permissions" }); return; }
+  const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "enabled must be a boolean" }); return; }
+  const previous = remoteCommandsEnabled();
+  setRemoteCommandsEnabled(parsed.data.enabled);
+  if (previous !== parsed.data.enabled) await recordAudit({ action: "REMOTE_COMMANDS_GLOBAL_GATE_CHANGED", context, organizationId: null, targetType: "platform", targetId: null, req, metadata: { previous_value: previous, new_value: parsed.data.enabled } });
+  res.json({ enabled: parsed.data.enabled, changed: previous !== parsed.data.enabled });
+});
 async function agentDevice(req: any) { const raw = req.headers.authorization; if (!raw?.startsWith("Bearer ")) return null; const hash = crypto.createHash("sha256").update(raw.slice(7)).digest("hex"); const [row] = await db.select({ device: devicesTable }).from(agentCredentialsTable).innerJoin(devicesTable, eq(agentCredentialsTable.deviceId, devicesTable.id)).where(and(eq(agentCredentialsTable.tokenHash, hash), sql`${agentCredentialsTable.revokedAt} is null`)); return row?.device ?? null; }
-async function signedAgent(req: any, res: any) { const device = await agentDevice(req); if (!device) { res.status(401).json({ error: "Invalid agent credentials" }); return null; } const h=req.headers; const version=h["x-nexora-signature-version"], keyId=h["x-nexora-key-id"], ts=h["x-nexora-timestamp"], nonce=h["x-nexora-nonce"], sig=h["x-nexora-signature"]; if(version!=="nexora-agent-sign-v1"||!keyId||!ts||!nonce||!sig){res.status(401).json({error:"Signed request required"});return null;} const timestamp=Number(ts); if(!Number.isFinite(timestamp)||Math.abs(Date.now()/1000-timestamp)>300){res.status(401).json({error:"Invalid signed request"});return null;} const [key]=await db.select().from(agentSigningKeysTable).where(and(eq(agentSigningKeysTable.id,keyId),eq(agentSigningKeysTable.deviceId,device.id),eq(agentSigningKeysTable.status,"ACTIVE"))); if(!key||!verifyAgentSignature(key.publicKey,canonicalAgentRequest(req.method,req.path,(req.rawBody??Buffer.from("")),ts,nonce,device.agentId,key.id),sig)){res.status(401).json({error:"Invalid signed request"});return null;} try { await db.insert(agentRequestNoncesTable).values({deviceId:device.id,signingKeyId:key.id,nonceHash:crypto.createHash("sha256").update(nonce).digest("hex"),requestTimestamp:timestamp,expiresAt:new Date((timestamp+600)*1000)}); } catch { await recordAudit({ action: "REMOTE_COMMAND_REPLAY_REJECTED", actorLabel: `agent:${device.agentId}`, organizationId: device.organizationId, targetType: "remote_command", targetId: null, result: "DENIED", req }); res.status(409).json({error:"Replay rejected"}); return null; } return device; }
+export async function signedAgent(req: any, res: any) { const device = await agentDevice(req); if (!device) { res.status(401).json({ error: "Invalid agent credentials" }); return null; } const h=req.headers; const version=h["x-nexora-signature-version"], keyId=h["x-nexora-key-id"], ts=h["x-nexora-timestamp"], nonce=h["x-nexora-nonce"], sig=h["x-nexora-signature"]; if(version!=="nexora-agent-sign-v1"||!keyId||!ts||!nonce||!sig){res.status(401).json({error:"Signed request required"});return null;} const timestamp=Number(ts); if(!Number.isFinite(timestamp)||Math.abs(Date.now()/1000-timestamp)>300){res.status(401).json({error:"Invalid signed request"});return null;} const [key]=await db.select().from(agentSigningKeysTable).where(and(eq(agentSigningKeysTable.id,keyId),eq(agentSigningKeysTable.deviceId,device.id),eq(agentSigningKeysTable.status,"ACTIVE"))); if(!key||!verifyAgentSignature(key.publicKey,canonicalAgentRequest(req.method,req.path,(req.rawBody??Buffer.from("")),ts,nonce,device.agentId,key.id),sig)){res.status(401).json({error:"Invalid signed request"});return null;} try { await db.insert(agentRequestNoncesTable).values({deviceId:device.id,signingKeyId:key.id,nonceHash:crypto.createHash("sha256").update(nonce).digest("hex"),requestTimestamp:timestamp,expiresAt:new Date((timestamp+600)*1000)}); } catch { await recordAudit({ action: "REMOTE_COMMAND_REPLAY_REJECTED", actorLabel: `agent:${device.agentId}`, organizationId: device.organizationId, targetType: "remote_command", targetId: null, result: "DENIED", req }); res.status(409).json({error:"Replay rejected"}); return null; } return device; }
 
 router.post("/v1/agent/signing-key", async (req, res): Promise<void> => {
   const device = await agentDevice(req); if (!device) { res.status(401).json({ error: "Invalid agent credentials" }); return; }
@@ -139,7 +157,9 @@ router.post("/v1/remote-commands", requireTenantContext, requirePermission("remo
   const [action] = await db.insert(privilegedActionsTable).values({ organizationId: device.organizationId, deviceId: device.id, actionType: "REMOTE_COMMAND", requestedBy: context.userId, expiresAt, requestReason: body.reason, safeParameters: { shell: body.shell, command: body.command, timeout_seconds: body.timeout_seconds, working_directory: body.working_directory ?? null } }).returning();
   const [job] = await db.insert(remoteCommandJobsTable).values({ organizationId: device.organizationId, deviceId: device.id, privilegedActionId: action!.id, shellType: body.shell, commandPayload: { shell: body.shell, command: body.command, reason: body.reason }, workingDirectory: body.working_directory, timeoutSeconds: body.timeout_seconds, requestedByUserId: context.userId, expiresAt }).returning();
   await recordAudit({ action: "REMOTE_COMMAND_REQUESTED", context, organizationId: device.organizationId, targetType: "remote_command", targetId: job!.id, req });
-  res.status(201).json(job);
+  // Keep the canonical snake_case contract while retaining compatibility with
+  // existing Task010 clients that consume the historical camelCase alias.
+  res.status(201).json({ ...job, job, privileged_action_id: action!.id, privilegedActionId: action!.id });
 });
 
 router.get("/v1/remote-commands", requireTenantContext, requirePermission("remote_commands.read"), async (req, res): Promise<void> => {

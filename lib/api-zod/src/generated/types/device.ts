@@ -51,4 +51,5 @@ export interface Device {
   first_seen_at: Date;
   created_at: Date;
   updated_at: Date;
+  remote_commands_enabled: boolean;
 }

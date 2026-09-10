@@ -525,6 +525,37 @@ paths:
                 $ref: "#/components/schemas/DeviceDetails"
         "404":
           description: Device not found
+  /v1/remote-commands/gate:
+    get:
+      operationId: getRemoteCommandsGate
+      tags: [remote-commands]
+      summary: Read the runtime remote command gate
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Runtime gate state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteCommandGate" }
+        "403": { description: Platform administrator required }
+    patch:
+      operationId: setRemoteCommandsGate
+      tags: [remote-commands]
+      summary: Change the runtime remote command gate
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetRemoteCommandsGateInput" }
+      responses:
+        "200":
+          description: Runtime gate state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteCommandGate" }
+        "400": { description: Invalid enabled value }
+        "403": { description: Platform administrator required }
   /v1/devices/{device_id}/site:
     patch:
       operationId: setDeviceSite
@@ -897,7 +928,7 @@ paths:
       parameters: [{ $ref: "#/components/parameters/PrivilegedActionId" }]
       responses:
         "200": { description: Approved, content: { application/json: { schema: { $ref: "#/components/schemas/PrivilegedAction" } } } }
-        "403": { description: Insufficient permissions, or the requester cannot self-approve under the two-person rule }
+        "403": { description: "Insufficient permissions, or the requester cannot self-approve under the two-person rule" }
         "404": { description: Not found }
         "409": { description: Action is no longer pending }
   /v1/privileged-actions/{id}/reject:
@@ -934,7 +965,7 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandInput" } } }
       responses:
-        "201": { description: Created in PENDING status, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
+        "201": { description: Created in PENDING status, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandCreateResponse" } } } }
         "400": { description: Invalid request }
         "403": { description: Insufficient permissions }
         "404": { description: Device not found or not reachable by this tenant }
@@ -1003,7 +1034,7 @@ paths:
         - { $ref: "#/components/parameters/NexoraSignature" }
       responses:
         "200": { description: Claimed; execution identity issued, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandClaim" } } } }
-        "204": { description: No eligible job (feature gates unmet, or nothing READY) }
+        "204": { description: "No eligible job (feature gates unmet, or nothing READY)" }
         "401": { description: Invalid signed request }
         "409": { description: Replay rejected (nonce already used) }
   /v1/agent/remote-commands/{id}/start:
@@ -1023,11 +1054,11 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/ExecutionAckInput" } } }
       responses:
-        "200": { description: RUNNING (or already RUNNING, idempotent), content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
+        "200": { description: "RUNNING (or already RUNNING, idempotent)", content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
         "400": { description: Invalid execution request }
         "401": { description: Invalid signed request }
-        "404": { description: Not found, or execution identity/device binding mismatch }
-        "409": { description: Job is not CLAIMED (terminal jobs cannot be (re)started), or replayed nonce }
+        "404": { description: "Not found, or execution identity/device binding mismatch" }
+        "409": { description: "Job is not CLAIMED (terminal jobs cannot be (re)started), or replayed nonce" }
   /v1/agent/remote-commands/{id}/heartbeat:
     post:
       operationId: heartbeatRemoteCommandExecution
@@ -1047,8 +1078,8 @@ paths:
       responses:
         "200": { description: Lease renewed, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
         "401": { description: Invalid signed request }
-        "404": { description: Not found, or execution identity/device binding mismatch }
-        "409": { description: Job is not CLAIMED/RUNNING, or replayed nonce }
+        "404": { description: "Not found, or execution identity/device binding mismatch" }
+        "409": { description: "Job is not CLAIMED/RUNNING, or replayed nonce" }
   /v1/agent/remote-commands/{id}/result:
     post:
       operationId: submitRemoteCommandResult
@@ -1073,10 +1104,10 @@ paths:
         content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandResultInput" } } }
       responses:
         "200": { description: Terminal state recorded (or idempotent repeat), content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandJob" } } } }
-        "400": { description: Invalid execution request, or output exceeds the permitted size }
+        "400": { description: "Invalid execution request, or output exceeds the permitted size" }
         "401": { description: Invalid signed request }
-        "404": { description: Not found, or execution identity/device binding mismatch }
-        "409": { description: Conflicting terminal result, or replayed nonce }
+        "404": { description: "Not found, or execution identity/device binding mismatch" }
+        "409": { description: "Conflicting terminal result, or replayed nonce" }
   /v1/agent/remote-commands/{id}/status:
     post:
       operationId: getRemoteCommandExecutionStatus
@@ -1093,7 +1124,7 @@ paths:
       responses:
         "200": { description: Current status, content: { application/json: { schema: { $ref: "#/components/schemas/RemoteCommandExecutionStatus" } } } }
         "401": { description: Invalid signed request }
-        "404": { description: Not found, or device binding mismatch }
+        "404": { description: "Not found, or device binding mismatch" }
 components:
   parameters:
     DeviceId:
@@ -1370,6 +1401,118 @@ components:
         changed:
           type: boolean
           description: False when the device already held the requested value; no audit event is written in that case.
+    SetRemoteCommandsGateInput:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+    RemoteCommandGate:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+        changed: { type: boolean }
+    RemoteCommandJob:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        privileged_action_id: { type: string, format: uuid }
+        status: { type: string }
+        device_id: { type: string, format: uuid }
+        shell: { type: string, enum: [CMD, POWERSHELL] }
+        command: { type: string }
+    RemoteCommandCreateResponse:
+      type: object
+      required: [job, privileged_action_id]
+      properties:
+        job: { $ref: "#/components/schemas/RemoteCommandJob" }
+        privileged_action_id: { type: string, format: uuid }
+    RemoteCommandJobList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/RemoteCommandJob" } }
+    RemoteCommandClaim:
+      type: object
+      required: [id, execution_id, execution_capability]
+      properties:
+        id: { type: string, format: uuid }
+        execution_id: { type: string, format: uuid }
+        execution_capability: { type: string }
+        shell: { type: string }
+        command: { type: string }
+    RemoteCommandExecutionStatus:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+        cancel_requested: { type: boolean }
+    PrivilegedActionInput:
+      type: object
+      required: [action_type, request_reason]
+      properties:
+        device_id: { type: [string, "null"], format: uuid }
+        action_type: { type: string }
+        request_reason: { type: string }
+        safe_parameters: { type: object, additionalProperties: true }
+        expires_at: { type: [string, "null"], format: date-time }
+    PrivilegedAction:
+      type: object
+      required: [id, status]
+      additionalProperties: true
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string }
+        requested_by: { type: [string, "null"], format: uuid }
+        approved_by: { type: [string, "null"], format: uuid }
+    PrivilegedActionList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PrivilegedAction" } }
+        page: { type: integer }
+        page_size: { type: integer }
+    RemoteCommandInput:
+      type: object
+      required: [device_id, shell, command, reason]
+      properties:
+        device_id: { type: string, format: uuid }
+        shell: { type: string, enum: [CMD, POWERSHELL] }
+        command: { type: string, minLength: 1, maxLength: 65536 }
+        timeout_seconds: { type: integer, minimum: 1, maximum: 900, default: 60 }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+        working_directory: { type: [string, "null"] }
+    AgentSigningKeyInput:
+      type: object
+      required: [algorithm, public_key, protocol_version]
+      properties:
+        algorithm: { type: string, enum: [ECDSA_P256_SHA256] }
+        public_key: { type: string }
+        protocol_version: { type: string, enum: [remote_command_v1] }
+    AgentSigningKeyResponse:
+      type: object
+      required: [key_id, key_fingerprint, status]
+      properties:
+        key_id: { type: string, format: uuid }
+        key_fingerprint: { type: string }
+        status: { type: string }
+    ExecutionAckInput:
+      type: object
+      required: [execution_id, execution_capability]
+      properties:
+        execution_id: { type: string, format: uuid }
+        execution_capability: { type: string }
+    RemoteCommandResultInput:
+      allOf:
+        - $ref: "#/components/schemas/ExecutionAckInput"
+        - type: object
+          properties:
+            exit_code: { type: integer }
+            stdout: { type: string }
+            stderr: { type: string }
+            stdout_truncated: { type: boolean }
+            stderr_truncated: { type: boolean }
     Membership:
       type: object
       required: [id, user_id, role]
@@ -1428,7 +1571,7 @@ components:
         timestamp: { type: string, format: date-time }
     Device:
       type: object
-      required: [id, agent_id, device_uuid, hostname, status, organization_id, first_seen_at, created_at, updated_at]
+      required: [id, agent_id, device_uuid, hostname, status, organization_id, first_seen_at, created_at, updated_at, remote_commands_enabled]
       properties:
         id: { type: string, format: uuid }
         agent_id: { type: string }
@@ -1456,6 +1599,7 @@ components:
         first_seen_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        remote_commands_enabled: { type: boolean }
     DeviceList:
       type: object
       required: [items, page, page_size, total]

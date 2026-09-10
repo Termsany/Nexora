@@ -149,6 +149,7 @@ function publicDevice(
     first_seen_at: device.firstSeenAt,
     created_at: device.createdAt,
     updated_at: device.updatedAt,
+    remote_commands_enabled: device.remoteCommandsEnabled,
   };
 }
 
@@ -274,6 +275,7 @@ router.get("/v1/devices", requireTenantContext, async (req, res): Promise<void> 
         osName: row.os_name, osVersion: row.os_version, osBuild: row.os_build,
         ipAddress: row.ip_address, agentVersion: row.agent_version,
         organizationId: row.organization_id, siteId: row.site_id,
+        remoteCommandsEnabled: row.remote_commands_enabled,
         lastSeenAt: row.last_seen_at, firstSeenAt: row.first_seen_at,
         createdAt: row.created_at, updatedAt: row.updated_at,
       } as typeof devicesTable.$inferSelect,

@@ -21,6 +21,8 @@ import type {
 
 import type {
   ActivityEvent,
+  AgentSigningKeyInput,
+  AgentSigningKeyResponse,
   Alert,
   AlertDetail,
   AlertList,
@@ -36,11 +38,13 @@ import type {
   DeviceDetails,
   DeviceList,
   DeviceMonitoring,
+  DeviceRemoteCommandGate,
   DeviceSiteAssignment,
   DeviceSoftwareList,
   EnrollmentInput,
   EnrollmentResponse,
   EnrollmentToken,
+  ExecutionAckInput,
   FleetSoftwareList,
   GetDeviceMetricsParams,
   GetDeviceProcessesSummary200,
@@ -57,6 +61,8 @@ import type {
   ListNotificationsParams,
   ListOrganizationSitesParams,
   ListOrganizationsParams,
+  ListPrivilegedActionsParams,
+  ListRemoteCommandsParams,
   ListSoftwareDevicesParams,
   LoginInput,
   Membership,
@@ -71,10 +77,23 @@ import type {
   OrganizationDetail,
   OrganizationList,
   PaginatedInventory,
+  PrivilegedAction,
+  PrivilegedActionInput,
+  PrivilegedActionList,
   ProcessesSnapshotInput,
+  RemoteCommandClaim,
+  RemoteCommandCreateResponse,
+  RemoteCommandExecutionStatus,
+  RemoteCommandGate,
+  RemoteCommandInput,
+  RemoteCommandJob,
+  RemoteCommandJobList,
+  RemoteCommandResultInput,
   ServicesSnapshotInput,
   SessionIdentity,
+  SetDeviceRemoteCommandsInput,
   SetDeviceSiteInput,
+  SetRemoteCommandsGateInput,
   Site,
   SiteList,
   SoftwareChangeList,
@@ -2329,6 +2348,154 @@ export function useGetDevice<TData = Awaited<ReturnType<typeof getDevice>>, TErr
 
 
 
+export const getGetRemoteCommandsGateUrl = () => {
+
+
+
+
+  return `/api/v1/remote-commands/gate`
+}
+
+/**
+ * @summary Read the runtime remote command gate
+ */
+export const getRemoteCommandsGate = async ( options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandGate> => {
+
+  return customFetch<RemoteCommandGate>(getGetRemoteCommandsGateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRemoteCommandsGateQueryKey = () => {
+    return [
+    `/api/v1/remote-commands/gate`
+    ] as const;
+    }
+
+
+export const getGetRemoteCommandsGateQueryOptions = <TData = Awaited<ReturnType<typeof getRemoteCommandsGate>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRemoteCommandsGate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRemoteCommandsGateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRemoteCommandsGate>>> = ({ signal }) => getRemoteCommandsGate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRemoteCommandsGate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRemoteCommandsGateQueryResult = NonNullable<Awaited<ReturnType<typeof getRemoteCommandsGate>>>
+export type GetRemoteCommandsGateQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read the runtime remote command gate
+ */
+
+export function useGetRemoteCommandsGate<TData = Awaited<ReturnType<typeof getRemoteCommandsGate>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRemoteCommandsGate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRemoteCommandsGateQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetRemoteCommandsGateUrl = () => {
+
+
+
+
+  return `/api/v1/remote-commands/gate`
+}
+
+/**
+ * @summary Change the runtime remote command gate
+ */
+export const setRemoteCommandsGate = async (setRemoteCommandsGateInput: SetRemoteCommandsGateInput, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandGate> => {
+
+  return customFetch<RemoteCommandGate>(getSetRemoteCommandsGateUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setRemoteCommandsGateInput)
+  }
+);}
+
+
+
+
+
+export const getSetRemoteCommandsGateMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setRemoteCommandsGate>>, TError,{data: BodyType<SetRemoteCommandsGateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setRemoteCommandsGate>>, TError,{data: BodyType<SetRemoteCommandsGateInput>}, TContext> => {
+
+const mutationKey = ['setRemoteCommandsGate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setRemoteCommandsGate>>, {data: BodyType<SetRemoteCommandsGateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  setRemoteCommandsGate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetRemoteCommandsGateMutationResult = NonNullable<Awaited<ReturnType<typeof setRemoteCommandsGate>>>
+    export type SetRemoteCommandsGateMutationBody = BodyType<SetRemoteCommandsGateInput>
+    export type SetRemoteCommandsGateMutationError = ErrorType<void>
+
+    /**
+ * @summary Change the runtime remote command gate
+ */
+export const useSetRemoteCommandsGate = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setRemoteCommandsGate>>, TError,{data: BodyType<SetRemoteCommandsGateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setRemoteCommandsGate>>,
+        TError,
+        {data: BodyType<SetRemoteCommandsGateInput>},
+        TContext
+      > => {
+      return useMutation(getSetRemoteCommandsGateMutationOptions(options));
+    }
+
 export const getSetDeviceSiteUrl = (deviceId: string,) => {
 
 
@@ -2400,6 +2567,79 @@ export const useSetDeviceSite = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getSetDeviceSiteMutationOptions(options));
+    }
+
+export const getSetDeviceRemoteCommandsUrl = (deviceId: string,) => {
+
+
+
+
+  return `/api/v1/devices/${deviceId}/remote-commands`
+}
+
+/**
+ * Sets the per-device remote command gate. Execution additionally requires the global REMOTE_COMMANDS_ENABLED switch, so enabling a device here is necessary but never sufficient. Requires the remote_commands.manage permission in the device's organization. Idempotent: re-sending the current value returns changed=false and writes no audit event. Devices outside the caller's tenant scope return 404 rather than 403.
+ * @summary Enable or disable remote command execution for a single device
+ */
+export const setDeviceRemoteCommands = async (deviceId: string,
+    setDeviceRemoteCommandsInput: SetDeviceRemoteCommandsInput, options?: Parameters<typeof customFetch>[1]): Promise<DeviceRemoteCommandGate> => {
+
+  return customFetch<DeviceRemoteCommandGate>(getSetDeviceRemoteCommandsUrl(deviceId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setDeviceRemoteCommandsInput)
+  }
+);}
+
+
+
+
+
+export const getSetDeviceRemoteCommandsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDeviceRemoteCommands>>, TError,{deviceId: string;data: BodyType<SetDeviceRemoteCommandsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setDeviceRemoteCommands>>, TError,{deviceId: string;data: BodyType<SetDeviceRemoteCommandsInput>}, TContext> => {
+
+const mutationKey = ['setDeviceRemoteCommands'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setDeviceRemoteCommands>>, {deviceId: string;data: BodyType<SetDeviceRemoteCommandsInput>}> = (props) => {
+          const {deviceId,data} = props ?? {};
+
+          return  setDeviceRemoteCommands(deviceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetDeviceRemoteCommandsMutationResult = NonNullable<Awaited<ReturnType<typeof setDeviceRemoteCommands>>>
+    export type SetDeviceRemoteCommandsMutationBody = BodyType<SetDeviceRemoteCommandsInput>
+    export type SetDeviceRemoteCommandsMutationError = ErrorType<void>
+
+    /**
+ * @summary Enable or disable remote command execution for a single device
+ */
+export const useSetDeviceRemoteCommands = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDeviceRemoteCommands>>, TError,{deviceId: string;data: BodyType<SetDeviceRemoteCommandsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setDeviceRemoteCommands>>,
+        TError,
+        {deviceId: string;data: BodyType<SetDeviceRemoteCommandsInput>},
+        TContext
+      > => {
+      return useMutation(getSetDeviceRemoteCommandsMutationOptions(options));
     }
 
 export const getGetDeviceMetricsUrl = (deviceId: string,
@@ -3817,4 +4057,1183 @@ export function useGetDeviceProcessesSummary<TData = Awaited<ReturnType<typeof g
 
 
 
+
+export const getRequestPrivilegedActionUrl = () => {
+
+
+
+
+  return `/api/v1/privileged-actions`
+}
+
+/**
+ * @summary Request a privileged device operation, pending approval
+ */
+export const requestPrivilegedAction = async (privilegedActionInput: PrivilegedActionInput, options?: Parameters<typeof customFetch>[1]): Promise<PrivilegedAction> => {
+
+  return customFetch<PrivilegedAction>(getRequestPrivilegedActionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(privilegedActionInput)
+  }
+);}
+
+
+
+
+
+export const getRequestPrivilegedActionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPrivilegedAction>>, TError,{data: BodyType<PrivilegedActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestPrivilegedAction>>, TError,{data: BodyType<PrivilegedActionInput>}, TContext> => {
+
+const mutationKey = ['requestPrivilegedAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPrivilegedAction>>, {data: BodyType<PrivilegedActionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestPrivilegedAction(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestPrivilegedActionMutationResult = NonNullable<Awaited<ReturnType<typeof requestPrivilegedAction>>>
+    export type RequestPrivilegedActionMutationBody = BodyType<PrivilegedActionInput>
+    export type RequestPrivilegedActionMutationError = ErrorType<void>
+
+    /**
+ * @summary Request a privileged device operation, pending approval
+ */
+export const useRequestPrivilegedAction = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPrivilegedAction>>, TError,{data: BodyType<PrivilegedActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestPrivilegedAction>>,
+        TError,
+        {data: BodyType<PrivilegedActionInput>},
+        TContext
+      > => {
+      return useMutation(getRequestPrivilegedActionMutationOptions(options));
+    }
+
+export const getListPrivilegedActionsUrl = (params?: ListPrivilegedActionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/privileged-actions?${stringifiedParams}` : `/api/v1/privileged-actions`
+}
+
+/**
+ * @summary List privileged action requests
+ */
+export const listPrivilegedActions = async (params?: ListPrivilegedActionsParams, options?: Parameters<typeof customFetch>[1]): Promise<PrivilegedActionList> => {
+
+  return customFetch<PrivilegedActionList>(getListPrivilegedActionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPrivilegedActionsQueryKey = (params?: ListPrivilegedActionsParams,) => {
+    return [
+    `/api/v1/privileged-actions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPrivilegedActionsQueryOptions = <TData = Awaited<ReturnType<typeof listPrivilegedActions>>, TError = ErrorType<void>>(params?: ListPrivilegedActionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPrivilegedActions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPrivilegedActionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPrivilegedActions>>> = ({ signal }) => listPrivilegedActions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPrivilegedActions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPrivilegedActionsQueryResult = NonNullable<Awaited<ReturnType<typeof listPrivilegedActions>>>
+export type ListPrivilegedActionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List privileged action requests
+ */
+
+export function useListPrivilegedActions<TData = Awaited<ReturnType<typeof listPrivilegedActions>>, TError = ErrorType<void>>(
+ params?: ListPrivilegedActionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPrivilegedActions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPrivilegedActionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPrivilegedActionUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/privileged-actions/${id}`
+}
+
+/**
+ * @summary Get privileged action detail
+ */
+export const getPrivilegedAction = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<PrivilegedAction> => {
+
+  return customFetch<PrivilegedAction>(getGetPrivilegedActionUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPrivilegedActionQueryKey = (id: string,) => {
+    return [
+    `/api/v1/privileged-actions/${id}`
+    ] as const;
+    }
+
+
+export const getGetPrivilegedActionQueryOptions = <TData = Awaited<ReturnType<typeof getPrivilegedAction>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPrivilegedAction>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPrivilegedActionQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPrivilegedAction>>> = ({ signal }) => getPrivilegedAction(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPrivilegedAction>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPrivilegedActionQueryResult = NonNullable<Awaited<ReturnType<typeof getPrivilegedAction>>>
+export type GetPrivilegedActionQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get privileged action detail
+ */
+
+export function useGetPrivilegedAction<TData = Awaited<ReturnType<typeof getPrivilegedAction>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPrivilegedAction>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPrivilegedActionQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApprovePrivilegedActionUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/privileged-actions/${id}/approve`
+}
+
+/**
+ * @summary Approve a pending privileged action (two-person rule enforced)
+ */
+export const approvePrivilegedAction = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<PrivilegedAction> => {
+
+  return customFetch<PrivilegedAction>(getApprovePrivilegedActionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getApprovePrivilegedActionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approvePrivilegedAction>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approvePrivilegedAction>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['approvePrivilegedAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approvePrivilegedAction>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  approvePrivilegedAction(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApprovePrivilegedActionMutationResult = NonNullable<Awaited<ReturnType<typeof approvePrivilegedAction>>>
+
+    export type ApprovePrivilegedActionMutationError = ErrorType<void>
+
+    /**
+ * @summary Approve a pending privileged action (two-person rule enforced)
+ */
+export const useApprovePrivilegedAction = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approvePrivilegedAction>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approvePrivilegedAction>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getApprovePrivilegedActionMutationOptions(options));
+    }
+
+export const getRejectPrivilegedActionUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/privileged-actions/${id}/reject`
+}
+
+/**
+ * @summary Reject a pending privileged action
+ */
+export const rejectPrivilegedAction = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<PrivilegedAction> => {
+
+  return customFetch<PrivilegedAction>(getRejectPrivilegedActionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRejectPrivilegedActionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectPrivilegedAction>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectPrivilegedAction>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['rejectPrivilegedAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectPrivilegedAction>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  rejectPrivilegedAction(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectPrivilegedActionMutationResult = NonNullable<Awaited<ReturnType<typeof rejectPrivilegedAction>>>
+
+    export type RejectPrivilegedActionMutationError = ErrorType<void>
+
+    /**
+ * @summary Reject a pending privileged action
+ */
+export const useRejectPrivilegedAction = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectPrivilegedAction>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectPrivilegedAction>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRejectPrivilegedActionMutationOptions(options));
+    }
+
+export const getCancelPrivilegedActionUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/privileged-actions/${id}/cancel`
+}
+
+/**
+ * @summary Cancel a privileged action the caller requested
+ */
+export const cancelPrivilegedAction = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<PrivilegedAction> => {
+
+  return customFetch<PrivilegedAction>(getCancelPrivilegedActionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelPrivilegedActionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelPrivilegedAction>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelPrivilegedAction>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['cancelPrivilegedAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelPrivilegedAction>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelPrivilegedAction(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelPrivilegedActionMutationResult = NonNullable<Awaited<ReturnType<typeof cancelPrivilegedAction>>>
+
+    export type CancelPrivilegedActionMutationError = ErrorType<void>
+
+    /**
+ * @summary Cancel a privileged action the caller requested
+ */
+export const useCancelPrivilegedAction = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelPrivilegedAction>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelPrivilegedAction>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getCancelPrivilegedActionMutationOptions(options));
+    }
+
+export const getRequestRemoteCommandUrl = () => {
+
+
+
+
+  return `/api/v1/remote-commands`
+}
+
+/**
+ * @summary Request execution of a remote command, pending approval
+ */
+export const requestRemoteCommand = async (remoteCommandInput: RemoteCommandInput, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandCreateResponse> => {
+
+  return customFetch<RemoteCommandCreateResponse>(getRequestRemoteCommandUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(remoteCommandInput)
+  }
+);}
+
+
+
+
+
+export const getRequestRemoteCommandMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestRemoteCommand>>, TError,{data: BodyType<RemoteCommandInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestRemoteCommand>>, TError,{data: BodyType<RemoteCommandInput>}, TContext> => {
+
+const mutationKey = ['requestRemoteCommand'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestRemoteCommand>>, {data: BodyType<RemoteCommandInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestRemoteCommand(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestRemoteCommandMutationResult = NonNullable<Awaited<ReturnType<typeof requestRemoteCommand>>>
+    export type RequestRemoteCommandMutationBody = BodyType<RemoteCommandInput>
+    export type RequestRemoteCommandMutationError = ErrorType<void>
+
+    /**
+ * @summary Request execution of a remote command, pending approval
+ */
+export const useRequestRemoteCommand = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestRemoteCommand>>, TError,{data: BodyType<RemoteCommandInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestRemoteCommand>>,
+        TError,
+        {data: BodyType<RemoteCommandInput>},
+        TContext
+      > => {
+      return useMutation(getRequestRemoteCommandMutationOptions(options));
+    }
+
+export const getListRemoteCommandsUrl = (params?: ListRemoteCommandsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/remote-commands?${stringifiedParams}` : `/api/v1/remote-commands`
+}
+
+/**
+ * @summary List remote command jobs
+ */
+export const listRemoteCommands = async (params?: ListRemoteCommandsParams, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandJobList> => {
+
+  return customFetch<RemoteCommandJobList>(getListRemoteCommandsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRemoteCommandsQueryKey = (params?: ListRemoteCommandsParams,) => {
+    return [
+    `/api/v1/remote-commands`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRemoteCommandsQueryOptions = <TData = Awaited<ReturnType<typeof listRemoteCommands>>, TError = ErrorType<void>>(params?: ListRemoteCommandsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRemoteCommands>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRemoteCommandsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRemoteCommands>>> = ({ signal }) => listRemoteCommands(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRemoteCommands>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRemoteCommandsQueryResult = NonNullable<Awaited<ReturnType<typeof listRemoteCommands>>>
+export type ListRemoteCommandsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List remote command jobs
+ */
+
+export function useListRemoteCommands<TData = Awaited<ReturnType<typeof listRemoteCommands>>, TError = ErrorType<void>>(
+ params?: ListRemoteCommandsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRemoteCommands>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRemoteCommandsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetRemoteCommandUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/remote-commands/${id}`
+}
+
+/**
+ * @summary Get remote command job detail, including output once terminal
+ */
+export const getRemoteCommand = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandJob> => {
+
+  return customFetch<RemoteCommandJob>(getGetRemoteCommandUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRemoteCommandQueryKey = (id: string,) => {
+    return [
+    `/api/v1/remote-commands/${id}`
+    ] as const;
+    }
+
+
+export const getGetRemoteCommandQueryOptions = <TData = Awaited<ReturnType<typeof getRemoteCommand>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRemoteCommand>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRemoteCommandQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRemoteCommand>>> = ({ signal }) => getRemoteCommand(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRemoteCommand>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRemoteCommandQueryResult = NonNullable<Awaited<ReturnType<typeof getRemoteCommand>>>
+export type GetRemoteCommandQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get remote command job detail, including output once terminal
+ */
+
+export function useGetRemoteCommand<TData = Awaited<ReturnType<typeof getRemoteCommand>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRemoteCommand>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRemoteCommandQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCancelRemoteCommandUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/remote-commands/${id}/cancel`
+}
+
+/**
+ * PENDING/READY cancel immediately to CANCELLED. CLAIMED/RUNNING soft-cancel to CANCEL_REQUESTED and wait for the Agent to acknowledge via a result.
+ * @summary Cancel a remote command job
+ */
+export const cancelRemoteCommand = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandJob> => {
+
+  return customFetch<RemoteCommandJob>(getCancelRemoteCommandUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelRemoteCommandMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelRemoteCommand>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelRemoteCommand>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['cancelRemoteCommand'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelRemoteCommand>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelRemoteCommand(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelRemoteCommandMutationResult = NonNullable<Awaited<ReturnType<typeof cancelRemoteCommand>>>
+
+    export type CancelRemoteCommandMutationError = ErrorType<void>
+
+    /**
+ * @summary Cancel a remote command job
+ */
+export const useCancelRemoteCommand = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelRemoteCommand>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelRemoteCommand>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getCancelRemoteCommandMutationOptions(options));
+    }
+
+export const getRegisterAgentSigningKeyUrl = () => {
+
+
+
+
+  return `/api/v1/agent/signing-key`
+}
+
+/**
+ * @summary Register this device's ECDSA public signing key
+ */
+export const registerAgentSigningKey = async (agentSigningKeyInput: AgentSigningKeyInput, options?: Parameters<typeof customFetch>[1]): Promise<AgentSigningKeyResponse> => {
+
+  return customFetch<AgentSigningKeyResponse>(getRegisterAgentSigningKeyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(agentSigningKeyInput)
+  }
+);}
+
+
+
+
+
+export const getRegisterAgentSigningKeyMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerAgentSigningKey>>, TError,{data: BodyType<AgentSigningKeyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerAgentSigningKey>>, TError,{data: BodyType<AgentSigningKeyInput>}, TContext> => {
+
+const mutationKey = ['registerAgentSigningKey'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerAgentSigningKey>>, {data: BodyType<AgentSigningKeyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerAgentSigningKey(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterAgentSigningKeyMutationResult = NonNullable<Awaited<ReturnType<typeof registerAgentSigningKey>>>
+    export type RegisterAgentSigningKeyMutationBody = BodyType<AgentSigningKeyInput>
+    export type RegisterAgentSigningKeyMutationError = ErrorType<void>
+
+    /**
+ * @summary Register this device's ECDSA public signing key
+ */
+export const useRegisterAgentSigningKey = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerAgentSigningKey>>, TError,{data: BodyType<AgentSigningKeyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerAgentSigningKey>>,
+        TError,
+        {data: BodyType<AgentSigningKeyInput>},
+        TContext
+      > => {
+      return useMutation(getRegisterAgentSigningKeyMutationOptions(options));
+    }
+
+export const getClaimRemoteCommandUrl = () => {
+
+
+
+
+  return `/api/v1/agent/remote-commands/claim`
+}
+
+/**
+ * @summary Atomically claim the oldest eligible READY job for this device
+ */
+export const claimRemoteCommand = async ( options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandClaim | void> => {
+
+  return customFetch<RemoteCommandClaim | void>(getClaimRemoteCommandUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getClaimRemoteCommandMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimRemoteCommand>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimRemoteCommand>>, TError,void, TContext> => {
+
+const mutationKey = ['claimRemoteCommand'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimRemoteCommand>>, void> = () => {
+
+
+          return  claimRemoteCommand(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimRemoteCommandMutationResult = NonNullable<Awaited<ReturnType<typeof claimRemoteCommand>>>
+
+    export type ClaimRemoteCommandMutationError = ErrorType<void>
+
+    /**
+ * @summary Atomically claim the oldest eligible READY job for this device
+ */
+export const useClaimRemoteCommand = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimRemoteCommand>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof claimRemoteCommand>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getClaimRemoteCommandMutationOptions(options));
+    }
+
+export const getStartRemoteCommandExecutionUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/agent/remote-commands/${id}/start`
+}
+
+/**
+ * @summary Transition a claimed execution to RUNNING
+ */
+export const startRemoteCommandExecution = async (id: string,
+    executionAckInput: ExecutionAckInput, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandJob> => {
+
+  return customFetch<RemoteCommandJob>(getStartRemoteCommandExecutionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(executionAckInput)
+  }
+);}
+
+
+
+
+
+export const getStartRemoteCommandExecutionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startRemoteCommandExecution>>, TError,{id: string;data: BodyType<ExecutionAckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startRemoteCommandExecution>>, TError,{id: string;data: BodyType<ExecutionAckInput>}, TContext> => {
+
+const mutationKey = ['startRemoteCommandExecution'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startRemoteCommandExecution>>, {id: string;data: BodyType<ExecutionAckInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  startRemoteCommandExecution(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartRemoteCommandExecutionMutationResult = NonNullable<Awaited<ReturnType<typeof startRemoteCommandExecution>>>
+    export type StartRemoteCommandExecutionMutationBody = BodyType<ExecutionAckInput>
+    export type StartRemoteCommandExecutionMutationError = ErrorType<void>
+
+    /**
+ * @summary Transition a claimed execution to RUNNING
+ */
+export const useStartRemoteCommandExecution = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startRemoteCommandExecution>>, TError,{id: string;data: BodyType<ExecutionAckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startRemoteCommandExecution>>,
+        TError,
+        {id: string;data: BodyType<ExecutionAckInput>},
+        TContext
+      > => {
+      return useMutation(getStartRemoteCommandExecutionMutationOptions(options));
+    }
+
+export const getHeartbeatRemoteCommandExecutionUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/agent/remote-commands/${id}/heartbeat`
+}
+
+/**
+ * @summary Renew the execution lease
+ */
+export const heartbeatRemoteCommandExecution = async (id: string,
+    executionAckInput: ExecutionAckInput, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandJob> => {
+
+  return customFetch<RemoteCommandJob>(getHeartbeatRemoteCommandExecutionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(executionAckInput)
+  }
+);}
+
+
+
+
+
+export const getHeartbeatRemoteCommandExecutionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof heartbeatRemoteCommandExecution>>, TError,{id: string;data: BodyType<ExecutionAckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof heartbeatRemoteCommandExecution>>, TError,{id: string;data: BodyType<ExecutionAckInput>}, TContext> => {
+
+const mutationKey = ['heartbeatRemoteCommandExecution'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof heartbeatRemoteCommandExecution>>, {id: string;data: BodyType<ExecutionAckInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  heartbeatRemoteCommandExecution(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type HeartbeatRemoteCommandExecutionMutationResult = NonNullable<Awaited<ReturnType<typeof heartbeatRemoteCommandExecution>>>
+    export type HeartbeatRemoteCommandExecutionMutationBody = BodyType<ExecutionAckInput>
+    export type HeartbeatRemoteCommandExecutionMutationError = ErrorType<void>
+
+    /**
+ * @summary Renew the execution lease
+ */
+export const useHeartbeatRemoteCommandExecution = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof heartbeatRemoteCommandExecution>>, TError,{id: string;data: BodyType<ExecutionAckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof heartbeatRemoteCommandExecution>>,
+        TError,
+        {id: string;data: BodyType<ExecutionAckInput>},
+        TContext
+      > => {
+      return useMutation(getHeartbeatRemoteCommandExecutionMutationOptions(options));
+    }
+
+export const getSubmitRemoteCommandResultUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/agent/remote-commands/${id}/result`
+}
+
+/**
+ * A result arriving while a cancellation is pending (CANCEL_REQUESTED) always resolves to CANCELLED regardless of the reported exit code. An identical result resubmitted with a fresh nonce is idempotent; a conflicting result against an already-terminal job is rejected 409 and recorded as REMOTE_COMMAND_RESULT_CONFLICT.
+ * @summary Submit the terminal result of an execution
+ */
+export const submitRemoteCommandResult = async (id: string,
+    remoteCommandResultInput: RemoteCommandResultInput, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandJob> => {
+
+  return customFetch<RemoteCommandJob>(getSubmitRemoteCommandResultUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(remoteCommandResultInput)
+  }
+);}
+
+
+
+
+
+export const getSubmitRemoteCommandResultMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitRemoteCommandResult>>, TError,{id: string;data: BodyType<RemoteCommandResultInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitRemoteCommandResult>>, TError,{id: string;data: BodyType<RemoteCommandResultInput>}, TContext> => {
+
+const mutationKey = ['submitRemoteCommandResult'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitRemoteCommandResult>>, {id: string;data: BodyType<RemoteCommandResultInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  submitRemoteCommandResult(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitRemoteCommandResultMutationResult = NonNullable<Awaited<ReturnType<typeof submitRemoteCommandResult>>>
+    export type SubmitRemoteCommandResultMutationBody = BodyType<RemoteCommandResultInput>
+    export type SubmitRemoteCommandResultMutationError = ErrorType<void>
+
+    /**
+ * @summary Submit the terminal result of an execution
+ */
+export const useSubmitRemoteCommandResult = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitRemoteCommandResult>>, TError,{id: string;data: BodyType<RemoteCommandResultInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitRemoteCommandResult>>,
+        TError,
+        {id: string;data: BodyType<RemoteCommandResultInput>},
+        TContext
+      > => {
+      return useMutation(getSubmitRemoteCommandResultMutationOptions(options));
+    }
+
+export const getGetRemoteCommandExecutionStatusUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/agent/remote-commands/${id}/status`
+}
+
+/**
+ * @summary Poll execution status and pending-cancellation flag
+ */
+export const getRemoteCommandExecutionStatus = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<RemoteCommandExecutionStatus> => {
+
+  return customFetch<RemoteCommandExecutionStatus>(getGetRemoteCommandExecutionStatusUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRemoteCommandExecutionStatusMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getRemoteCommandExecutionStatus>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getRemoteCommandExecutionStatus>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['getRemoteCommandExecutionStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getRemoteCommandExecutionStatus>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  getRemoteCommandExecutionStatus(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetRemoteCommandExecutionStatusMutationResult = NonNullable<Awaited<ReturnType<typeof getRemoteCommandExecutionStatus>>>
+
+    export type GetRemoteCommandExecutionStatusMutationError = ErrorType<void>
+
+    /**
+ * @summary Poll execution status and pending-cancellation flag
+ */
+export const useGetRemoteCommandExecutionStatus = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getRemoteCommandExecutionStatus>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof getRemoteCommandExecutionStatus>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getGetRemoteCommandExecutionStatusMutationOptions(options));
+    }
 

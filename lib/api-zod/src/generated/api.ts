@@ -847,7 +847,8 @@ export const ListDevicesResponse = zod.object({
   "last_seen_at": zod.coerce.date().nullish(),
   "first_seen_at": zod.coerce.date(),
   "created_at": zod.coerce.date(),
-  "updated_at": zod.coerce.date()
+  "updated_at": zod.coerce.date(),
+  "remote_commands_enabled": zod.boolean()
 })),
   "page": zod.int(),
   "page_size": zod.int(),
@@ -888,7 +889,8 @@ export const GetDeviceResponse = zod.object({
   "last_seen_at": zod.coerce.date().nullish(),
   "first_seen_at": zod.coerce.date(),
   "created_at": zod.coerce.date(),
-  "updated_at": zod.coerce.date()
+  "updated_at": zod.coerce.date(),
+  "remote_commands_enabled": zod.boolean()
 }).and(zod.object({
   "hardware": zod.object({
   "manufacturer": zod.string().nullish(),
@@ -918,6 +920,28 @@ export const GetDeviceResponse = zod.object({
 
 
 /**
+ * @summary Read the runtime remote command gate
+ */
+export const GetRemoteCommandsGateResponse = zod.object({
+  "enabled": zod.boolean(),
+  "changed": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Change the runtime remote command gate
+ */
+export const SetRemoteCommandsGateBody = zod.object({
+  "enabled": zod.boolean()
+})
+
+export const SetRemoteCommandsGateResponse = zod.object({
+  "enabled": zod.boolean(),
+  "changed": zod.boolean().optional()
+})
+
+
+/**
  * The site must belong to the device's organization. Device organization is immutable through the device APIs and cannot be changed here.
  * @summary Assign a device to a site within its own organization
  */
@@ -933,6 +957,25 @@ export const SetDeviceSiteResponse = zod.object({
   "id": zod.uuid(),
   "organization_id": zod.uuid(),
   "site_id": zod.uuid().nullish()
+})
+
+
+/**
+ * Sets the per-device remote command gate. Execution additionally requires the global REMOTE_COMMANDS_ENABLED switch, so enabling a device here is necessary but never sufficient. Requires the remote_commands.manage permission in the device's organization. Idempotent: re-sending the current value returns changed=false and writes no audit event. Devices outside the caller's tenant scope return 404 rather than 403.
+ * @summary Enable or disable remote command execution for a single device
+ */
+export const SetDeviceRemoteCommandsParams = zod.object({
+  "device_id": zod.uuid()
+})
+
+export const SetDeviceRemoteCommandsBody = zod.object({
+  "enabled": zod.boolean().describe('Whether this device may execute remote commands. Execution also requires the global REMOTE_COMMANDS_ENABLED switch, so enabling a device is necessary but not sufficient.\n')
+})
+
+export const SetDeviceRemoteCommandsResponse = zod.object({
+  "device_id": zod.uuid(),
+  "remote_commands_enabled": zod.boolean(),
+  "changed": zod.boolean().describe('False when the device already held the requested value; no audit event is written in that case.')
 })
 
 
@@ -1452,5 +1495,354 @@ export const GetDeviceProcessesSummaryParams = zod.object({
 })
 
 export const GetDeviceProcessesSummaryResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Request a privileged device operation, pending approval
+ */
+export const RequestPrivilegedActionBody = zod.object({
+  "device_id": zod.uuid().nullish(),
+  "action_type": zod.string(),
+  "request_reason": zod.string(),
+  "safe_parameters": zod.record(zod.string(), zod.unknown()).optional(),
+  "expires_at": zod.coerce.date().nullish()
+})
+
+export const RequestPrivilegedActionResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.string(),
+  "requested_by": zod.uuid().nullish(),
+  "approved_by": zod.uuid().nullish()
+})
+
+
+/**
+ * @summary List privileged action requests
+ */
+export const listPrivilegedActionsQueryPageDefault = 1;
+
+export const listPrivilegedActionsQueryPageSizeDefault = 25;
+export const listPrivilegedActionsQueryPageSizeMax = 100;
+
+
+
+export const ListPrivilegedActionsQueryParams = zod.object({
+  "organization": zod.uuid().optional(),
+  "page": zod.coerce.number().int().min(1).default(listPrivilegedActionsQueryPageDefault),
+  "page_size": zod.coerce.number().int().min(1).max(listPrivilegedActionsQueryPageSizeMax).default(listPrivilegedActionsQueryPageSizeDefault)
+})
+
+export const ListPrivilegedActionsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "status": zod.string(),
+  "requested_by": zod.uuid().nullish(),
+  "approved_by": zod.uuid().nullish()
+})),
+  "page": zod.int().optional(),
+  "page_size": zod.int().optional()
+})
+
+
+/**
+ * @summary Get privileged action detail
+ */
+export const GetPrivilegedActionParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetPrivilegedActionResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.string(),
+  "requested_by": zod.uuid().nullish(),
+  "approved_by": zod.uuid().nullish()
+})
+
+
+/**
+ * @summary Approve a pending privileged action (two-person rule enforced)
+ */
+export const ApprovePrivilegedActionParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const ApprovePrivilegedActionResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.string(),
+  "requested_by": zod.uuid().nullish(),
+  "approved_by": zod.uuid().nullish()
+})
+
+
+/**
+ * @summary Reject a pending privileged action
+ */
+export const RejectPrivilegedActionParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const RejectPrivilegedActionResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.string(),
+  "requested_by": zod.uuid().nullish(),
+  "approved_by": zod.uuid().nullish()
+})
+
+
+/**
+ * @summary Cancel a privileged action the caller requested
+ */
+export const CancelPrivilegedActionParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const CancelPrivilegedActionResponse = zod.object({
+  "id": zod.uuid(),
+  "status": zod.string(),
+  "requested_by": zod.uuid().nullish(),
+  "approved_by": zod.uuid().nullish()
+})
+
+
+/**
+ * @summary Request execution of a remote command, pending approval
+ */
+export const requestRemoteCommandBodyCommandMax = 65536;
+
+export const requestRemoteCommandBodyTimeoutSecondsDefault = 60;
+export const requestRemoteCommandBodyTimeoutSecondsMax = 900;
+
+export const requestRemoteCommandBodyReasonMax = 1000;
+
+
+
+export const RequestRemoteCommandBody = zod.object({
+  "device_id": zod.uuid(),
+  "shell": zod.enum(['CMD', 'POWERSHELL']),
+  "command": zod.string().min(1).max(requestRemoteCommandBodyCommandMax),
+  "timeout_seconds": zod.int().min(1).max(requestRemoteCommandBodyTimeoutSecondsMax).default(requestRemoteCommandBodyTimeoutSecondsDefault),
+  "reason": zod.string().min(1).max(requestRemoteCommandBodyReasonMax),
+  "working_directory": zod.string().nullish()
+})
+
+export const RequestRemoteCommandResponse = zod.object({
+  "job": zod.object({
+  "id": zod.uuid(),
+  "privileged_action_id": zod.uuid().optional(),
+  "status": zod.string().optional(),
+  "device_id": zod.uuid().optional(),
+  "shell": zod.enum(['CMD', 'POWERSHELL']).optional(),
+  "command": zod.string().optional()
+}),
+  "privileged_action_id": zod.uuid()
+})
+
+
+/**
+ * @summary List remote command jobs
+ */
+export const ListRemoteCommandsQueryParams = zod.object({
+  "organization": zod.uuid().optional()
+})
+
+export const ListRemoteCommandsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "privileged_action_id": zod.uuid().optional(),
+  "status": zod.string().optional(),
+  "device_id": zod.uuid().optional(),
+  "shell": zod.enum(['CMD', 'POWERSHELL']).optional(),
+  "command": zod.string().optional()
+}))
+})
+
+
+/**
+ * @summary Get remote command job detail, including output once terminal
+ */
+export const GetRemoteCommandParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetRemoteCommandResponse = zod.object({
+  "id": zod.uuid(),
+  "privileged_action_id": zod.uuid().optional(),
+  "status": zod.string().optional(),
+  "device_id": zod.uuid().optional(),
+  "shell": zod.enum(['CMD', 'POWERSHELL']).optional(),
+  "command": zod.string().optional()
+})
+
+
+/**
+ * PENDING/READY cancel immediately to CANCELLED. CLAIMED/RUNNING soft-cancel to CANCEL_REQUESTED and wait for the Agent to acknowledge via a result.
+ * @summary Cancel a remote command job
+ */
+export const CancelRemoteCommandParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const CancelRemoteCommandResponse = zod.object({
+  "id": zod.uuid(),
+  "privileged_action_id": zod.uuid().optional(),
+  "status": zod.string().optional(),
+  "device_id": zod.uuid().optional(),
+  "shell": zod.enum(['CMD', 'POWERSHELL']).optional(),
+  "command": zod.string().optional()
+})
+
+
+/**
+ * @summary Register this device's ECDSA public signing key
+ */
+export const RegisterAgentSigningKeyBody = zod.object({
+  "algorithm": zod.enum(['ECDSA_P256_SHA256']),
+  "public_key": zod.string(),
+  "protocol_version": zod.enum(['remote_command_v1'])
+})
+
+export const RegisterAgentSigningKeyResponse = zod.object({
+  "key_id": zod.uuid(),
+  "key_fingerprint": zod.string(),
+  "status": zod.string()
+})
+
+
+/**
+ * @summary Atomically claim the oldest eligible READY job for this device
+ */
+export const ClaimRemoteCommandHeader = zod.object({
+  "X-Nexora-Signature-Version": zod.enum(['nexora-agent-sign-v1']),
+  "X-Nexora-Key-Id": zod.uuid(),
+  "X-Nexora-Timestamp": zod.string().describe('Unix seconds; rejected if more than 300s from server time.'),
+  "X-Nexora-Nonce": zod.string().describe('Single-use per device; a repeat is rejected as a replay.'),
+  "X-Nexora-Signature": zod.string().describe('Base64 DER ECDSA P-256\/SHA-256 signature over the canonical request.')
+})
+
+export const ClaimRemoteCommandResponse = zod.object({
+  "id": zod.uuid(),
+  "execution_id": zod.uuid(),
+  "execution_capability": zod.string(),
+  "shell": zod.string().optional(),
+  "command": zod.string().optional()
+})
+
+
+/**
+ * @summary Transition a claimed execution to RUNNING
+ */
+export const StartRemoteCommandExecutionParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const StartRemoteCommandExecutionHeader = zod.object({
+  "X-Nexora-Signature-Version": zod.enum(['nexora-agent-sign-v1']),
+  "X-Nexora-Key-Id": zod.uuid(),
+  "X-Nexora-Timestamp": zod.string().describe('Unix seconds; rejected if more than 300s from server time.'),
+  "X-Nexora-Nonce": zod.string().describe('Single-use per device; a repeat is rejected as a replay.'),
+  "X-Nexora-Signature": zod.string().describe('Base64 DER ECDSA P-256\/SHA-256 signature over the canonical request.')
+})
+
+export const StartRemoteCommandExecutionBody = zod.object({
+  "execution_id": zod.uuid(),
+  "execution_capability": zod.string()
+})
+
+export const StartRemoteCommandExecutionResponse = zod.object({
+  "id": zod.uuid(),
+  "privileged_action_id": zod.uuid().optional(),
+  "status": zod.string().optional(),
+  "device_id": zod.uuid().optional(),
+  "shell": zod.enum(['CMD', 'POWERSHELL']).optional(),
+  "command": zod.string().optional()
+})
+
+
+/**
+ * @summary Renew the execution lease
+ */
+export const HeartbeatRemoteCommandExecutionParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const HeartbeatRemoteCommandExecutionHeader = zod.object({
+  "X-Nexora-Signature-Version": zod.enum(['nexora-agent-sign-v1']),
+  "X-Nexora-Key-Id": zod.uuid(),
+  "X-Nexora-Timestamp": zod.string().describe('Unix seconds; rejected if more than 300s from server time.'),
+  "X-Nexora-Nonce": zod.string().describe('Single-use per device; a repeat is rejected as a replay.'),
+  "X-Nexora-Signature": zod.string().describe('Base64 DER ECDSA P-256\/SHA-256 signature over the canonical request.')
+})
+
+export const HeartbeatRemoteCommandExecutionBody = zod.object({
+  "execution_id": zod.uuid(),
+  "execution_capability": zod.string()
+})
+
+export const HeartbeatRemoteCommandExecutionResponse = zod.object({
+  "id": zod.uuid(),
+  "privileged_action_id": zod.uuid().optional(),
+  "status": zod.string().optional(),
+  "device_id": zod.uuid().optional(),
+  "shell": zod.enum(['CMD', 'POWERSHELL']).optional(),
+  "command": zod.string().optional()
+})
+
+
+/**
+ * A result arriving while a cancellation is pending (CANCEL_REQUESTED) always resolves to CANCELLED regardless of the reported exit code. An identical result resubmitted with a fresh nonce is idempotent; a conflicting result against an already-terminal job is rejected 409 and recorded as REMOTE_COMMAND_RESULT_CONFLICT.
+ * @summary Submit the terminal result of an execution
+ */
+export const SubmitRemoteCommandResultParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const SubmitRemoteCommandResultHeader = zod.object({
+  "X-Nexora-Signature-Version": zod.enum(['nexora-agent-sign-v1']),
+  "X-Nexora-Key-Id": zod.uuid(),
+  "X-Nexora-Timestamp": zod.string().describe('Unix seconds; rejected if more than 300s from server time.'),
+  "X-Nexora-Nonce": zod.string().describe('Single-use per device; a repeat is rejected as a replay.'),
+  "X-Nexora-Signature": zod.string().describe('Base64 DER ECDSA P-256\/SHA-256 signature over the canonical request.')
+})
+
+export const SubmitRemoteCommandResultBody = zod.object({
+  "execution_id": zod.uuid(),
+  "execution_capability": zod.string()
+}).and(zod.object({
+  "exit_code": zod.int().optional(),
+  "stdout": zod.string().optional(),
+  "stderr": zod.string().optional(),
+  "stdout_truncated": zod.boolean().optional(),
+  "stderr_truncated": zod.boolean().optional()
+}))
+
+export const SubmitRemoteCommandResultResponse = zod.object({
+  "id": zod.uuid(),
+  "privileged_action_id": zod.uuid().optional(),
+  "status": zod.string().optional(),
+  "device_id": zod.uuid().optional(),
+  "shell": zod.enum(['CMD', 'POWERSHELL']).optional(),
+  "command": zod.string().optional()
+})
+
+
+/**
+ * @summary Poll execution status and pending-cancellation flag
+ */
+export const GetRemoteCommandExecutionStatusParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetRemoteCommandExecutionStatusHeader = zod.object({
+  "X-Nexora-Signature-Version": zod.enum(['nexora-agent-sign-v1']),
+  "X-Nexora-Key-Id": zod.uuid(),
+  "X-Nexora-Timestamp": zod.string().describe('Unix seconds; rejected if more than 300s from server time.'),
+  "X-Nexora-Nonce": zod.string().describe('Single-use per device; a repeat is rejected as a replay.'),
+  "X-Nexora-Signature": zod.string().describe('Base64 DER ECDSA P-256\/SHA-256 signature over the canonical request.')
+})
+
+export const GetRemoteCommandExecutionStatusResponse = zod.object({
+  "status": zod.string(),
+  "cancel_requested": zod.boolean().optional()
+})
 
 

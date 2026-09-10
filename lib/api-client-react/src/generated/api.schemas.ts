@@ -232,6 +232,163 @@ export interface DeviceSiteAssignment {
   site_id?: string | null;
 }
 
+export interface SetDeviceRemoteCommandsInput {
+  /** Whether this device may execute remote commands. Execution also requires the global REMOTE_COMMANDS_ENABLED switch, so enabling a device is necessary but not sufficient. */
+  enabled: boolean;
+}
+
+export interface DeviceRemoteCommandGate {
+  device_id: string;
+  remote_commands_enabled: boolean;
+  /** False when the device already held the requested value; no audit event is written in that case. */
+  changed: boolean;
+}
+
+export interface SetRemoteCommandsGateInput {
+  enabled: boolean;
+}
+
+export interface RemoteCommandGate {
+  enabled: boolean;
+  changed?: boolean;
+}
+
+export type RemoteCommandJobShell = typeof RemoteCommandJobShell[keyof typeof RemoteCommandJobShell];
+
+
+export const RemoteCommandJobShell = {
+  CMD: 'CMD',
+  POWERSHELL: 'POWERSHELL',
+} as const;
+
+export interface RemoteCommandJob {
+  id: string;
+  privileged_action_id?: string;
+  status?: string;
+  device_id?: string;
+  shell?: RemoteCommandJobShell;
+  command?: string;
+}
+
+export interface RemoteCommandCreateResponse {
+  job: RemoteCommandJob;
+  privileged_action_id: string;
+}
+
+export interface RemoteCommandJobList {
+  items: RemoteCommandJob[];
+}
+
+export interface RemoteCommandClaim {
+  id: string;
+  execution_id: string;
+  execution_capability: string;
+  shell?: string;
+  command?: string;
+}
+
+export interface RemoteCommandExecutionStatus {
+  status: string;
+  cancel_requested?: boolean;
+}
+
+export type PrivilegedActionInputSafeParameters = { [key: string]: unknown };
+
+export interface PrivilegedActionInput {
+  /** @nullable */
+  device_id?: string | null;
+  action_type: string;
+  request_reason: string;
+  safe_parameters?: PrivilegedActionInputSafeParameters;
+  /** @nullable */
+  expires_at?: string | null;
+}
+
+export interface PrivilegedAction {
+  id: string;
+  status: string;
+  /** @nullable */
+  requested_by?: string | null;
+  /** @nullable */
+  approved_by?: string | null;
+  [key: string]: unknown;
+ }
+
+export interface PrivilegedActionList {
+  items: PrivilegedAction[];
+  page?: number;
+  page_size?: number;
+}
+
+export type RemoteCommandInputShell = typeof RemoteCommandInputShell[keyof typeof RemoteCommandInputShell];
+
+
+export const RemoteCommandInputShell = {
+  CMD: 'CMD',
+  POWERSHELL: 'POWERSHELL',
+} as const;
+
+export interface RemoteCommandInput {
+  device_id: string;
+  shell: RemoteCommandInputShell;
+  /**
+     * @minLength 1
+     * @maxLength 65536
+     */
+  command: string;
+  /**
+     * @minimum 1
+     * @maximum 900
+     */
+  timeout_seconds?: number;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  reason: string;
+  /** @nullable */
+  working_directory?: string | null;
+}
+
+export type AgentSigningKeyInputAlgorithm = typeof AgentSigningKeyInputAlgorithm[keyof typeof AgentSigningKeyInputAlgorithm];
+
+
+export const AgentSigningKeyInputAlgorithm = {
+  ECDSA_P256_SHA256: 'ECDSA_P256_SHA256',
+} as const;
+
+export type AgentSigningKeyInputProtocolVersion = typeof AgentSigningKeyInputProtocolVersion[keyof typeof AgentSigningKeyInputProtocolVersion];
+
+
+export const AgentSigningKeyInputProtocolVersion = {
+  remote_command_v1: 'remote_command_v1',
+} as const;
+
+export interface AgentSigningKeyInput {
+  algorithm: AgentSigningKeyInputAlgorithm;
+  public_key: string;
+  protocol_version: AgentSigningKeyInputProtocolVersion;
+}
+
+export interface AgentSigningKeyResponse {
+  key_id: string;
+  key_fingerprint: string;
+  status: string;
+}
+
+export interface ExecutionAckInput {
+  execution_id: string;
+  execution_capability: string;
+}
+
+export type RemoteCommandResultInput = ExecutionAckInput & {
+  exit_code?: number;
+  stdout?: string;
+  stderr?: string;
+  stdout_truncated?: boolean;
+  stderr_truncated?: boolean;
+};
+
 export type MembershipStatus = typeof MembershipStatus[keyof typeof MembershipStatus];
 
 
@@ -338,6 +495,7 @@ export interface Device {
   first_seen_at: string;
   created_at: string;
   updated_at: string;
+  remote_commands_enabled: boolean;
 }
 
 export interface DeviceList {
@@ -1030,6 +1188,30 @@ export type CreatedEnrollmentToken = EnrollmentToken & {
   token: string;
 };
 
+export type NexoraSignatureVersionParameter = typeof NexoraSignatureVersionParameter[keyof typeof NexoraSignatureVersionParameter];
+
+
+export const NexoraSignatureVersionParameter = {
+  'nexora-agent-sign-v1': 'nexora-agent-sign-v1',
+} as const;
+
+export type NexoraKeyIdParameter = string;
+
+/**
+ * Unix seconds; rejected if more than 300s from server time.
+ */
+export type NexoraTimestampParameter = string;
+
+/**
+ * Single-use per device; a repeat is rejected as a replay.
+ */
+export type NexoraNonceParameter = string;
+
+/**
+ * Base64 DER ECDSA P-256/SHA-256 signature over the canonical request.
+ */
+export type NexoraSignatureParameter = string;
+
 export type ListOrganizationsParams = {
 search?: string;
 status?: ListOrganizationsStatus;
@@ -1286,4 +1468,21 @@ export const ListDeviceProcessesSort = {
 } as const;
 
 export type GetDeviceProcessesSummary200 = { [key: string]: unknown };
+
+export type ListPrivilegedActionsParams = {
+organization?: string;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+page_size?: number;
+};
+
+export type ListRemoteCommandsParams = {
+organization?: string;
+};
 
