@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -15,6 +16,30 @@ namespace Nexora.Agent.Tests;
 
 public sealed class AgentCoreTests
 {
+    [Fact]
+    public void RelativeSigningPathGetsExactlyOneLeadingSlash()
+    {
+        Assert.Equal("/v1/agent/remote-commands/claim", AgentRequestSigner.CanonicalizePath("v1/agent/remote-commands/claim"));
+        Assert.Equal("/v1/agent/remote-commands/claim", AgentRequestSigner.CanonicalizePath("/v1/agent/remote-commands/claim"));
+    }
+
+    [Fact]
+    public void SignatureVerifiesAsDerWithCanonicalPathOnly()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        const string method = "POST";
+        const string relativePath = "v1/agent/remote-commands/claim";
+        const string agentId = "NX-000001";
+        const string keyId = "key-1";
+        var body = Encoding.UTF8.GetBytes("{\"ok\":true}");
+        var signed = AgentRequestSigner.Sign(key, method, relativePath, body, agentId, keyId);
+        var digest = Convert.ToHexString(SHA256.HashData(body)).ToLowerInvariant();
+        var canonical = string.Join("\n", "nexora-agent-sign-v1", method, "/" + relativePath, digest, signed.Timestamp, signed.Nonce, agentId, keyId);
+
+        Assert.True(key.VerifyData(Encoding.UTF8.GetBytes(canonical), Convert.FromBase64String(signed.Signature), HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
+        Assert.False(key.VerifyData(Encoding.UTF8.GetBytes(canonical.Replace("/v1/", "//v1/", StringComparison.Ordinal)), Convert.FromBase64String(signed.Signature), HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
+        Assert.False(key.VerifyData(Encoding.UTF8.GetBytes(canonical.Replace("/v1/", "v1/", StringComparison.Ordinal)), Convert.FromBase64String(signed.Signature), HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
+    }
     [Theory]
     [InlineData("Running", ServiceState.Running)]
     [InlineData("Start Pending", ServiceState.StartPending)]
