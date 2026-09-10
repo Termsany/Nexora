@@ -23,7 +23,7 @@ public sealed class RemoteCommandExecutor
             StandardOutputEncoding = shell.Equals("CMD", StringComparison.OrdinalIgnoreCase) ? Encoding.Unicode : Encoding.UTF8,
             StandardErrorEncoding = shell.Equals("CMD", StringComparison.OrdinalIgnoreCase) ? Encoding.Unicode : Encoding.UTF8,
         };
-        if (shell.Equals("CMD", StringComparison.OrdinalIgnoreCase)) { psi.ArgumentList.Add("/d"); psi.ArgumentList.Add("/u"); psi.ArgumentList.Add("/s"); psi.ArgumentList.Add("/c"); psi.ArgumentList.Add("chcp 65001>nul && " + command); }
+        if (shell.Equals("CMD", StringComparison.OrdinalIgnoreCase)) { psi.ArgumentList.Add("/d"); psi.ArgumentList.Add("/u"); psi.ArgumentList.Add("/s"); psi.ArgumentList.Add("/c"); psi.ArgumentList.Add(command); }
         else { psi.ArgumentList.Add("-NoProfile"); psi.ArgumentList.Add("-NonInteractive"); psi.ArgumentList.Add("-Command"); psi.ArgumentList.Add("[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " + command); }
         using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         process.Start();

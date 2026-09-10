@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Nexora.Agent.Security;
 using Nexora.Agent.Services;
 using Xunit;
@@ -15,6 +16,7 @@ public sealed class RemoteCommandAcceptanceTests
 
     [Fact] public void Task010_EcdsaP256KeyGeneration_Works() { using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256); var data = Encoding.UTF8.GetBytes("task010"); var sig = key.SignData(data, HashAlgorithmName.SHA256); Assert.True(key.VerifyData(data, sig, HashAlgorithmName.SHA256)); }
     [Fact] public async Task Task010_Cmd_Success_ReturnsStdoutAndExitZero() { var r = await Run("CMD", "echo nexora-task010"); Assert.Equal(0, r.ExitCode); Assert.Contains("nexora-task010", r.Stdout, StringComparison.OrdinalIgnoreCase); Assert.False(r.StderrTruncated); }
+    [Fact] public async Task Task010_Cmd_AsciiOutput_IsDecodedCorrectly() { var r = await Run("CMD", "echo DEPLOY"); Assert.Equal("DEPLOY", r.Stdout.Trim()); }
     [Fact] public async Task Task010_Cmd_NonZeroExit_Preserved() { var r = await Run("CMD", "exit /b 7"); Assert.Equal(7, r.ExitCode); }
     [Fact] public async Task Task010_PowerShell_Success() { var r = await Run("POWERSHELL", "Write-Output task010"); Assert.Equal(0, r.ExitCode); Assert.Contains("task010", r.Stdout); }
     [Fact] public async Task Task010_PowerShell_NonZeroExit_Preserved() { var r = await Run("POWERSHELL", "exit 9"); Assert.Equal(9, r.ExitCode); }
@@ -23,6 +25,8 @@ public sealed class RemoteCommandAcceptanceTests
     [Fact] public void Task010_PowerShell_DoesNotUseExecutionPolicyBypass() => Assert.DoesNotContain("-ExecutionPolicy Bypass", "-NoProfile -NonInteractive");
     [Fact] public async Task Task010_UnicodeStdout_Preserved() { var r = await Run("CMD", "echo Nexora اختبار عربي"); Assert.Contains("اختبار", r.Stdout); }
     [Fact] public async Task Task010_UnicodeStderr_Preserved() { var r = await Run("POWERSHELL", "[Console]::Error.WriteLine('Nexora اختبار عربي')"); Assert.Contains("اختبار", r.Stderr); }
+    [Fact] public async Task Task010_Cmd_Stderr_IsDecodedCorrectly() { var r = await Run("CMD", "echo DEPLOY-ERR 1>&2"); Assert.Equal("DEPLOY-ERR", r.Stderr.Trim()); }
+    [Fact] public void Task010_SignedResult_PreservesDecodedUnicode() { var payload = JsonSerializer.Serialize(new { stdout = "DEPLOY اختبار", stderr = "" }); Assert.Contains("DEPLOY اختبار", payload); }
     [Fact] public async Task Task010_StdoutLimit_OneMiB_Truncates() { var r = await Run("POWERSHELL", "'x' * 1200000"); Assert.True(r.Stdout.Length <= 1024 * 1024); Assert.True(r.StdoutTruncated); }
     [Fact] public async Task Task010_StderrLimit_OneMiB_Truncates() { var r = await Run("POWERSHELL", "[Console]::Error.Write('x' * 1200000)"); Assert.True(r.Stderr.Length <= 1024 * 1024); Assert.True(r.StderrTruncated); }
     [Fact] public async Task Task010_SimultaneousStdoutStderr_NoDeadlock() { var r = await Run("POWERSHELL", "1..10000 | % { Write-Output out; [Console]::Error.WriteLine('err') }"); Assert.NotNull(r); }
