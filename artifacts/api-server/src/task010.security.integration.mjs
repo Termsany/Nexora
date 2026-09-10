@@ -14,7 +14,7 @@ import test, { before, after } from "node:test";
 import pg from "pg";
 import { createApp } from "./app.ts";
 import { hashPassword } from "./auth/password.ts";
-import { canonicalAgentRequest } from "./security/agent-signing.ts";
+import { canonicalAgentRequest, verifyAgentSignature } from "./security/agent-signing.ts";
 import { resetLoginRateForTests } from "./security/rate-limit.ts";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -25,6 +25,26 @@ const SENTINELS = {
   executionCapability: "TEST_EXECUTION_CAPABILITY_SENTINEL",
   privateKey: "TEST_PRIVATE_KEY_SENTINEL",
 };
+
+test("Task010 .NET AgentRequestSigner base64-SPKI DER interoperates with Node verifier", () => {
+  const publicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEavTlLG4UrEkelG4PPH6NrpJN2qQf0JVCAidKuO1P4XAvppVEppC7Uakm2XcRhnRMYEZSO0gGzds/FCjWn7o/gQ==";
+  const timestamp = "1789033729";
+  const nonce = "34ed73bc2bb64a19a392eeb2b6146418";
+  const signature = "MEQCIEa5iwG9pOOy35PHopZFllzrW0g7Zj0EiKaSPGqzmoWWAiB/in+QgwqyLuTdh4Y1Z+XAm+DYvrVOrRCO319Eb5a+qA==";
+  const body = Buffer.from("{}");
+  const canonical = canonicalAgentRequest("POST", "/v1/agent/remote-commands/claim", body, timestamp, nonce, "NX-TEST", "key-test");
+  assert.equal(verifyAgentSignature(publicKey, canonical, signature), true);
+
+  const der = Buffer.from(publicKey, "base64");
+  const pem = `-----BEGIN PUBLIC KEY-----\n${der.toString("base64").match(/.{1,64}/g).join("\n")}\n-----END PUBLIC KEY-----`;
+  assert.equal(verifyAgentSignature(pem, canonical, signature), true);
+  assert.equal(verifyAgentSignature(publicKey, canonical.replace("/v1/", "//v1/"), signature), false);
+  assert.equal(verifyAgentSignature(publicKey, canonical.replace("44136fa3", "00000000"), signature), false);
+  assert.equal(verifyAgentSignature(publicKey, canonical.replace("\nPOST\n", "\nGET\n"), signature), false);
+
+  const wrong = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ type: "spki", format: "der" }).toString("base64");
+  assert.equal(verifyAgentSignature(wrong, canonical, signature), false);
+});
 
 let server;
 let baseUrl;

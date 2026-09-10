@@ -6,5 +6,10 @@ export function canonicalAgentRequest(method: string, path: string, body: Buffer
   return [SIGNING_VERSION, method.toUpperCase(), path, digest, timestamp, nonce, agentId, keyId].join("\n");
 }
 export function verifyAgentSignature(publicKey: string, canonical: string, signature: string) {
-  try { return crypto.verify("sha256", Buffer.from(canonical, "utf8"), { key: publicKey, dsaEncoding: "der" }, Buffer.from(signature, "base64")); } catch { return false; }
+  try {
+    const key = publicKey.includes("-----BEGIN")
+      ? crypto.createPublicKey(publicKey)
+      : crypto.createPublicKey({ key: Buffer.from(publicKey, "base64"), format: "der", type: "spki" });
+    return crypto.verify("sha256", Buffer.from(canonical, "utf8"), { key, dsaEncoding: "der" }, Buffer.from(signature, "base64"));
+  } catch { return false; }
 }
