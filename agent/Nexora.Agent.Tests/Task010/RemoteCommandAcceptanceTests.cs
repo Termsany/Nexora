@@ -26,7 +26,16 @@ public sealed class RemoteCommandAcceptanceTests
     [Fact] public async Task Task010_UnicodeStdout_Preserved() { var r = await Run("CMD", "echo Nexora اختبار عربي"); Assert.Contains("اختبار", r.Stdout); }
     [Fact] public async Task Task010_UnicodeStderr_Preserved() { var r = await Run("POWERSHELL", "[Console]::Error.WriteLine('Nexora اختبار عربي')"); Assert.Contains("اختبار", r.Stderr); }
     [Fact] public async Task Task010_Cmd_Stderr_IsDecodedCorrectly() { var r = await Run("CMD", "echo DEPLOY-ERR 1>&2"); Assert.Equal("DEPLOY-ERR", r.Stderr.Trim()); }
-    [Fact] public void Task010_SignedResult_PreservesDecodedUnicode() { var payload = JsonSerializer.Serialize(new { stdout = "DEPLOY اختبار", stderr = "" }); Assert.Contains("DEPLOY اختبار", payload); }
+    [Fact]
+    public void Task010_ResultSerialization_PreservesDecodedUnicode()
+    {
+        const string expected = "DEPLOY اختبار";
+        var payload = JsonSerializer.Serialize(new { stdout = expected, stderr = "" });
+        using var document = JsonDocument.Parse(payload);
+        Assert.True(document.RootElement.TryGetProperty("stdout", out var stdout));
+        Assert.Equal(expected, stdout.GetString());
+        Assert.Equal("", document.RootElement.GetProperty("stderr").GetString());
+    }
     [Fact] public async Task Task010_StdoutLimit_OneMiB_Truncates() { var r = await Run("POWERSHELL", "'x' * 1200000"); Assert.True(r.Stdout.Length <= 1024 * 1024); Assert.True(r.StdoutTruncated); }
     [Fact] public async Task Task010_StderrLimit_OneMiB_Truncates() { var r = await Run("POWERSHELL", "[Console]::Error.Write('x' * 1200000)"); Assert.True(r.Stderr.Length <= 1024 * 1024); Assert.True(r.StderrTruncated); }
     [Fact] public async Task Task010_SimultaneousStdoutStderr_NoDeadlock() { var r = await Run("POWERSHELL", "1..10000 | % { Write-Output out; [Console]::Error.WriteLine('err') }"); Assert.NotNull(r); }
