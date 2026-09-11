@@ -31,7 +31,10 @@ public sealed class OutputEncodingAcceptanceTests
         var result = await Run("CMD", "hostname");
         Assert.Equal(0, result.ExitCode);
         Assert.Equal("", result.Stderr);
-        Assert.DoesNotContain("\0", result.Stdout);
+        // char overload on purpose: the string overload compares culture-
+        // sensitively, and ICU treats NUL as zero-weight, so it reports a match
+        // inside any string at all.
+        Assert.DoesNotContain('\0', result.Stdout);
         // Case-sensitive on purpose: the OS hostname is the truth here, not the
         // Nexora device display name. On the pilot host the device is recorded
         // as "DEPLOY" while Windows reports "Deploy" - an assertion that
