@@ -59,6 +59,27 @@ jobs:
             -ExecutionPolicy Bypass `
             -File ".\scripts\windows\task010-runtime-validation.ps1"
 
+      # Job logs and run artifacts both require repository admin rights to read
+      # through the API, so a failure here is otherwise opaque to anyone without
+      # them. Re-emit each failed test as a workflow error annotation, which is
+      # readable without admin. Diagnostics only: this asserts nothing and
+      # cannot turn a failing run green.
+      - name: Report failing Task 010 tests
+        if: failure()
+        shell: powershell
+        run: |
+          $trx = ".\artifacts\task010-windows-validation\task010-agent.trx"
+          if (-not (Test-Path $trx)) { Write-Host "::error::No TRX produced - the suite did not run to completion."; exit 0 }
+          [xml]$xml = Get-Content $trx
+          $all = @($xml.TestRun.Results.UnitTestResult)
+          $bad = @($all | Where-Object outcome -ne 'Passed')
+          Write-Host "::error::Task010 results: $($all.Count) total, $(@($all | Where-Object outcome -eq 'Passed').Count) passed, $($bad.Count) not passed"
+          foreach ($t in $bad) {
+            $msg = ($t.Output.ErrorInfo.Message -replace '\s+', ' ')
+            if ($msg.Length -gt 600) { $msg = $msg.Substring(0, 600) }
+            Write-Host "::error::[$($t.outcome)] $($t.testName) :: $msg"
+          }
+
       - name: Publish Agent self-contained win-x64
         shell: powershell
         run: |
