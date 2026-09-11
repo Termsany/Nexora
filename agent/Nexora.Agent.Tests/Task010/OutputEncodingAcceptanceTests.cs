@@ -187,6 +187,87 @@ public sealed class OutputEncodingAcceptanceTests
         Assert.False(Verify(JsonSerializer.SerializeToUtf8Bytes(new { stdout = "changed", stderr = result.Stderr, exit_code = result.ExitCode })));
     }
 
+    private static int ScriptCount() =>
+        Directory.Exists(RemoteCommandExecutor.ScriptDirectory)
+            ? Directory.GetFiles(RemoteCommandExecutor.ScriptDirectory, "nexora-*.cmd").Length
+            : 0;
+
+    // TEST 13 - a completed command leaves nothing behind.
+    [Fact]
+    public async Task Task010_Cmd_TempScript_RemovedAfterSuccess()
+    {
+        var before = ScriptCount();
+        var result = await Run("CMD", "echo NEXORA-CLEANUP-OK");
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(before, ScriptCount());
+    }
+
+    // TEST 14 - nor does a failing one.
+    [Fact]
+    public async Task Task010_Cmd_TempScript_RemovedAfterFailure()
+    {
+        var before = ScriptCount();
+        var result = await Run("CMD", "(echo NEXORA-CLEANUP-FAIL 1>&2)& exit /b 9");
+        Assert.Equal(9, result.ExitCode);
+        Assert.Equal(before, ScriptCount());
+    }
+
+    // TEST 15 - nor a command killed by the timeout.
+    [Fact]
+    public async Task Task010_Cmd_TempScript_RemovedAfterTimeout()
+    {
+        var before = ScriptCount();
+        var result = await Run("CMD", "ping -n 60 127.0.0.1>nul", 3);
+        Assert.True(result.TimedOut);
+        Assert.Equal(before, ScriptCount());
+    }
+
+    // TEST 16 - concurrent executions must not share or clobber a script file.
+    // Each must return only its own output.
+    [Fact]
+    public async Task Task010_Cmd_TempScript_ConcurrentExecutionsAreIsolated()
+    {
+        var before = ScriptCount();
+        var tasks = Enumerable.Range(0, 12).Select(i => Run("CMD", $"echo NEXORA-CONCURRENT-{i}")).ToArray();
+        var results = await Task.WhenAll(tasks);
+        for (var i = 0; i < results.Length; i++)
+        {
+            Assert.Equal(0, results[i].ExitCode);
+            Assert.Equal($"NEXORA-CONCURRENT-{i}", Normalize(results[i].Stdout));
+        }
+        Assert.Equal(before, ScriptCount());
+    }
+
+    // TEST 17 - a filename is visible to anything that can list the directory,
+    // so it must never carry command text. Inspect mid-flight, while the script
+    // still exists on disk.
+    [Fact]
+    public async Task Task010_Cmd_TempScript_NameLeaksNoCommandText()
+    {
+        const string secretish = "NEXORA-SENSITIVE-ARGUMENT-9f3a";
+        var execution = Run("CMD", $"echo {secretish}& ping -n 6 127.0.0.1>nul", 20);
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        var inspected = 0;
+        while (DateTime.UtcNow < deadline && !execution.IsCompleted)
+        {
+            foreach (var file in Directory.Exists(RemoteCommandExecutor.ScriptDirectory)
+                         ? Directory.GetFiles(RemoteCommandExecutor.ScriptDirectory, "*")
+                         : Array.Empty<string>())
+            {
+                var name = Path.GetFileName(file);
+                inspected++;
+                Assert.DoesNotContain("NEXORA-SENSITIVE", name, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("echo", name, StringComparison.OrdinalIgnoreCase);
+                Assert.Matches(@"^nexora-[0-9a-f]{32}\.cmd$", name);
+            }
+            if (inspected > 0) break;
+            await Task.Delay(100);
+        }
+        var result = await execution;
+        Assert.Equal(secretish, Normalize(result.Stdout));
+        Assert.True(inspected > 0, "no in-flight script file was observed to inspect");
+    }
+
     // Pins the exact Production corruption: "Deploy\r\n" read as UTF-16LE.
     [Fact]
     public async Task Task010_PreviousMojibake_Regression()
