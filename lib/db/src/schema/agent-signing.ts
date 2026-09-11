@@ -1,5 +1,5 @@
 import { index, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
-import { devicesTable } from "./nexora";
+import { devicesTable } from "./nexora.ts";
 
 export const agentSigningKeyStatusEnum = pgEnum("agent_signing_key_status", ["ACTIVE", "REVOKED", "REPLACED"]);
 export const agentSigningKeysTable = pgTable("nexora_agent_signing_keys", {

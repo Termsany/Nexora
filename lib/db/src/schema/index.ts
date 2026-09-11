@@ -17,9 +17,9 @@
 //   export type InsertPost = z.infer<typeof insertPostSchema>;
 //   export type Post = typeof postsTable.$inferSelect;
 
-export * from "./tenancy";
-export * from "./nexora";
-export * from "./remote-commands";
-export * from "./agent-signing";
-export * from "./agent-nonces";
-export * from "./remote-desktop";
+export * from "./tenancy.ts";
+export * from "./nexora.ts";
+export * from "./remote-commands.ts";
+export * from "./agent-signing.ts";
+export * from "./agent-nonces.ts";
+export * from "./remote-desktop.ts";

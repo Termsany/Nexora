@@ -40,6 +40,14 @@ export function isExpired(session: Pick<SessionRow, "expiresAt">): boolean {
   return session.expiresAt.getTime() <= Date.now();
 }
 
+/** Postgres 23505 anywhere in the cause chain. */
+function isUniqueViolation(error: unknown): boolean {
+  for (let current = error, depth = 0; current && depth < 5; current = (current as { cause?: unknown }).cause, depth++) {
+    if ((current as { code?: string }).code === "23505") return true;
+  }
+  return false;
+}
+
 /**
  * Create the approval record and its session together. The unique partial
  * index on device_id rejects a second live session at the database level, so
@@ -77,8 +85,10 @@ export async function createSession(input: {
       return { session: session!, viewerToken: viewer.raw };
     });
   } catch (error) {
-    // 23505 is the one-live-session-per-device index doing its job.
-    if ((error as { code?: string }).code === "23505") return { error: "device_busy" };
+    // 23505 is the one-live-session-per-device index doing its job. The driver
+    // error is wrapped by the query layer, so the chain has to be walked -
+    // checking only the top-level code silently turns a refusal into a 500.
+    if (isUniqueViolation(error)) return { error: "device_busy" };
     throw error;
   }
 }

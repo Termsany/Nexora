@@ -14,7 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { organizationsTable, sitesTable, usersTable } from "./tenancy";
+import { organizationsTable, sitesTable, usersTable } from "./tenancy.ts";
 
 export const deviceStatusEnum = pgEnum("device_status", ["ONLINE", "OFFLINE", "UNKNOWN"]);
 export const alertTypeEnum = pgEnum("alert_type", ["DEVICE_OFFLINE", "CPU_HIGH", "MEMORY_HIGH", "DISK_HIGH"]);

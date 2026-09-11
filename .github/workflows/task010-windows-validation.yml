@@ -59,6 +59,30 @@ jobs:
             -ExecutionPolicy Bypass `
             -File ".\scripts\windows\task010-runtime-validation.ps1"
 
+      # Remote Desktop V1. Kept as its own step so a failure here is
+      # attributable and cannot be mistaken for a Remote Command regression.
+      - name: Run Remote Desktop agent tests
+        shell: powershell
+        run: |
+          dotnet test ".\agent\Nexora.Agent.Tests\Nexora.Agent.Tests.csproj" `
+            --configuration Release `
+            --filter "FullyQualifiedName~RemoteDesktop" `
+            --logger "trx;LogFileName=remote-desktop-agent.trx" `
+            --results-directory ".\artifacts\task010-windows-validation"
+
+      - name: Verify Remote Desktop capability and isolation guard
+        shell: powershell
+        run: |
+          $heartbeat = Get-Content ".\agent\Nexora.Agent\Services\HeartbeatService.cs" -Raw
+          if ($heartbeat -notmatch 'remote_desktop_v1') { throw "Agent does not advertise remote_desktop_v1" }
+          if ($heartbeat -notmatch 'remote_command_v1') { throw "Remote Command capability was dropped" }
+          $service = Get-Content ".\agent\Nexora.Agent\Services\RemoteDesktopService.cs" -Raw
+          # Nothing may listen on the endpoint; the channel is outbound only.
+          foreach ($forbidden in @('HttpListener','TcpListener','WebSocketServer')) {
+            if ($service -match [regex]::Escape($forbidden)) { throw "Agent must not listen: found $forbidden" }
+          }
+          Write-Host "Remote Desktop capability and outbound-only channel verified"
+
       - name: Publish Agent self-contained win-x64
         shell: powershell
         run: |

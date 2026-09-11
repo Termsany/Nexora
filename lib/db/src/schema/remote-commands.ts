@@ -1,6 +1,6 @@
 import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { devicesTable, privilegedActionsTable } from "./nexora";
-import { organizationsTable, usersTable } from "./tenancy";
+import { devicesTable, privilegedActionsTable } from "./nexora.ts";
+import { organizationsTable, usersTable } from "./tenancy.ts";
 
 export const remoteCommandStatusEnum = pgEnum("remote_command_status", ["PENDING", "READY", "CLAIMED", "RUNNING", "SUCCEEDED", "FAILED", "TIMED_OUT", "CANCEL_REQUESTED", "CANCELLED", "EXPIRED", "UNKNOWN"]);
 export const remoteCommandShellEnum = pgEnum("remote_command_shell", ["CMD", "POWERSHELL"]);

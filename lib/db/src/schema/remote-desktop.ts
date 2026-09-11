@@ -1,7 +1,7 @@
 import { boolean, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { devicesTable, privilegedActionsTable } from "./nexora";
-import { organizationsTable, sitesTable, usersTable } from "./tenancy";
+import { devicesTable, privilegedActionsTable } from "./nexora.ts";
+import { organizationsTable, sitesTable, usersTable } from "./tenancy.ts";
 
 /**
  * Remote Desktop V1.
