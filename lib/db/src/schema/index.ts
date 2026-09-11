@@ -22,3 +22,4 @@ export * from "./nexora";
 export * from "./remote-commands";
 export * from "./agent-signing";
 export * from "./agent-nonces";
+export * from "./remote-desktop";

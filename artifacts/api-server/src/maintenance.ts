@@ -3,6 +3,7 @@ import { pool } from "@workspace/db";
 import { MAINTENANCE_INTERVAL_MS } from "./telemetry/policy";
 import { runTelemetryMaintenance } from "./telemetry/maintenance";
 import { ALERT_EVALUATION_INTERVAL_MS } from "./alerts/policy";
+import { expireStaleSessions as expireRemoteDesktopSessions } from "./remote-desktop/sessions.ts";
 import { evaluateAlerts } from "./alerts/engine";
 import { cleanupSoftwareChanges } from "./software/reconcile.ts";
 import { cleanupRuntimeInventory } from "./inventory/reconcile.ts";
@@ -25,6 +26,12 @@ while (running) {
       logger.info({ deleted: await cleanupSoftwareChanges() }, "SoftwareChangeRetentionSucceeded");
       logger.info(await cleanupRuntimeInventory(), "RuntimeInventoryRetentionSucceeded");
       await reconcileRemoteCommands();
+      // Remote Desktop sessions whose gateway died, whose deadline passed, or
+      // that went silent. Without this an API restart would leave rows stuck
+      // in a live status and the one-session-per-device index would keep
+      // refusing new sessions forever.
+      const reaped = await expireRemoteDesktopSessions();
+      if (reaped.length) logger.info({ sessions: reaped.length }, "RemoteDesktopSessionsExpired");
       firstRun = false;
       nextTelemetryRun = Date.now() + MAINTENANCE_INTERVAL_MS;
     } catch (error) {

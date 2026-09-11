@@ -12,6 +12,7 @@ import softwareRouter from "./software";
 import inventoryRouter from "./inventory";
 import securityRouter from "./security";
 import remoteCommandsRouter from "./remote-commands";
+import remoteDesktopRouter from "./remote-desktop";
 
 const router: IRouter = Router();
 
@@ -26,6 +27,7 @@ router.use(softwareRouter);
 router.use(inventoryRouter);
 router.use(securityRouter);
 router.use(remoteCommandsRouter);
+router.use(remoteDesktopRouter);
 router.use(nexoraRouter);
 router.use(administrationRouter);
 

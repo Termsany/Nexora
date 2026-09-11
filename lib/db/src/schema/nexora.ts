@@ -32,7 +32,7 @@ export const serviceStartupTypeEnum = pgEnum("service_startup_type", ["AUTOMATIC
 export const serviceEventTypeEnum = pgEnum("service_event_type", ["STATUS_CHANGED", "STARTUP_TYPE_CHANGED", "SERVICE_ADDED", "SERVICE_REMOVED"]);
 export const processArchitectureEnum = pgEnum("process_architecture", ["x64", "x86", "arm64", "unknown"]);
 export const privilegedActionStatusEnum = pgEnum("privileged_action_status", ["PENDING_APPROVAL", "APPROVED", "REJECTED", "EXPIRED", "CANCELLED"]);
-export const privilegedActionTypeEnum = pgEnum("privileged_action_type", ["REMOTE_COMMAND", "REMOTE_POWERSHELL", "SERVICE_START", "SERVICE_STOP", "SERVICE_RESTART", "PROCESS_TERMINATE", "SOFTWARE_INSTALL", "SOFTWARE_UNINSTALL", "PATCH_INSTALL"]);
+export const privilegedActionTypeEnum = pgEnum("privileged_action_type", ["REMOTE_COMMAND", "REMOTE_POWERSHELL", "SERVICE_START", "SERVICE_STOP", "SERVICE_RESTART", "PROCESS_TERMINATE", "SOFTWARE_INSTALL", "SOFTWARE_UNINSTALL", "PATCH_INSTALL", "REMOTE_DESKTOP"]);
 
 export const devicesTable = pgTable("nexora_devices", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -79,6 +79,7 @@ export const devicesTable = pgTable("nexora_devices", {
   servicesLastCollectedAt: timestamp("services_last_collected_at", { withTimezone: true }),
   processesLastCollectedAt: timestamp("processes_last_collected_at", { withTimezone: true }),
   remoteCommandsEnabled: boolean("remote_commands_enabled").notNull().default(false),
+  remoteDesktopEnabled: boolean("remote_desktop_enabled").notNull().default(false),
   capabilities: jsonb("capabilities").notNull().default(sql`'[]'::jsonb`),
 }, (table) => [
   index("nexora_devices_last_seen_idx").on(table.lastSeenAt),

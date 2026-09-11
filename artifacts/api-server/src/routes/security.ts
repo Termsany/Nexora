@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { auditLogTable, db, devicesTable, organizationsTable, privilegedActionsTable, remoteCommandJobsTable } from "@workspace/db";
+import { auditLogTable, db, devicesTable, organizationsTable, privilegedActionsTable, remoteCommandJobsTable, remoteDesktopSessionsTable } from "@workspace/db";
 import { requirePermission, requireTenantContext } from "../tenancy/context.ts";
+import { authorizeSession } from "../remote-desktop/sessions.ts";
 import { hasPermission, organizationScope } from "../tenancy/policy.ts";
 import { recordAudit } from "../tenancy/audit.ts";
 import { remoteCommandsEnabled } from "../security/remote-command-gate.ts";
@@ -91,6 +92,18 @@ async function transition(req: any, res: any, nextStatus: "APPROVED" | "REJECTED
     if (job && device && remoteCommandsEnabled() && device.remoteCommandsEnabled && Array.isArray(device.capabilities) && device.capabilities.includes("remote_command_v1")) {
       await db.update(remoteCommandJobsTable).set({ status: "READY", readyAt: new Date(), approvedByUserId: context.userId, updatedAt: new Date() }).where(and(eq(remoteCommandJobsTable.id, job.id), eq(remoteCommandJobsTable.status, "PENDING")));
       await recordAudit({ action: "REMOTE_COMMAND_READY", context, organizationId: row.organizationId, targetType: "remote_command", targetId: job.id, req });
+    }
+  }
+  // Remote Desktop reuses this approval gate rather than owning one. A session
+  // only becomes claimable by the Agent once its action is approved, and the
+  // device switch plus agent capability are re-checked at promotion time, so
+  // an approval granted before the device was disabled cannot still open it.
+  if (nextStatus === "APPROVED" && row.actionType === "REMOTE_DESKTOP" && updated) {
+    const [session] = await db.select().from(remoteDesktopSessionsTable).where(eq(remoteDesktopSessionsTable.privilegedActionId, row.id));
+    const device = row.deviceId ? (await db.select().from(devicesTable).where(eq(devicesTable.id, row.deviceId)))[0] : null;
+    if (session && device && device.remoteDesktopEnabled && Array.isArray(device.capabilities) && device.capabilities.includes("remote_desktop_v1")) {
+      const authorized = await authorizeSession(session.id, context.userId!);
+      if (authorized) await recordAudit({ action: "REMOTE_DESKTOP_AUTHORIZED", context, organizationId: row.organizationId, targetType: "remote_desktop_session", targetId: session.id, req });
     }
   }
   await recordAudit({ action: nextStatus === "APPROVED" ? "PRIVILEGED_ACTION_APPROVED" : nextStatus === "REJECTED" ? "PRIVILEGED_ACTION_REJECTED" : "PRIVILEGED_ACTION_CANCELLED", context, organizationId: row.organizationId, targetType: "privileged_action", targetId: row.id, req });

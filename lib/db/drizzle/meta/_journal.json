@@ -92,6 +92,13 @@
       "when": 1788202000000,
       "tag": "0012_agent_nonces",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788203000000,
+      "tag": "0013_remote_desktop",
+      "breakpoints": true
     }
   ]
 }
