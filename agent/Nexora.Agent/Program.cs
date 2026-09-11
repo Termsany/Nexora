@@ -44,5 +44,6 @@ builder.Services.AddSingleton<ServiceInventoryService>();
 builder.Services.AddSingleton<ProcessInventoryService>();
 builder.Services.AddSingleton<RemoteCommandExecutor>();
 builder.Services.AddSingleton<RemoteCommandService>();
+builder.Services.AddSingleton<RemoteDesktopService>();
 builder.Services.AddHostedService<AgentWorker>();
 await builder.Build().RunAsync();

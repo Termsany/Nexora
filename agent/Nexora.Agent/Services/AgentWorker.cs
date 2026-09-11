@@ -13,6 +13,7 @@ public sealed class AgentWorker(
     ServiceInventoryService services,
     ProcessInventoryService processes,
     RemoteCommandService remoteCommands,
+    RemoteDesktopService remoteDesktop,
     BackoffPolicy backoff,
     ILogger<AgentWorker> logger) : BackgroundService
 {
@@ -42,7 +43,8 @@ public sealed class AgentWorker(
             metrics.RunAsync(credentials.AgentToken!, stoppingToken),
             services.RunAsync(credentials.AgentToken!, stoppingToken),
             processes.RunAsync(credentials.AgentToken!, stoppingToken),
-            remoteCommands.RunAsync(credentials, stoppingToken));
+            remoteCommands.RunAsync(credentials, stoppingToken),
+            remoteDesktop.RunAsync(credentials, stoppingToken));
     }
 
     public override Task StopAsync(CancellationToken cancellationToken)
