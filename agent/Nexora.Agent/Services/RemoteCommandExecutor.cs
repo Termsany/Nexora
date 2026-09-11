@@ -17,9 +17,18 @@ public sealed class RemoteCommandExecutor
     // decoded as a leading U+FEFF and corrupt the first line of output.
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
-    // The script file, by contrast, is written WITH a BOM: that is what tells
-    // cmd.exe to parse the batch as UTF-8 rather than the machine's OEM page.
-    private static readonly Encoding Utf8WithBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+    // The script is written WITHOUT a BOM too. cmd.exe does not skip a BOM in a
+    // batch file - it tries to execute it, and the first line dies with
+    // "'<BOM>@echo' is not recognized as an internal or external command",
+    // leaving ECHO on so every later line is echoed into the caller's stdout.
+    // The code page is established by the outer shell instead; see CmdPrologue.
+    //
+    // Outer cmd sets the console to UTF-8, then launches an inner cmd that
+    // inherits it. Because the inner cmd starts with code page 65001 already
+    // active, it reads the batch file as UTF-8 - which is what a BOM was
+    // supposed to achieve. Only ASCII (the generated script path) crosses the
+    // outer command line, so nothing can be mangled on the way in.
+    private const string CmdPrologue = "chcp 65001>nul && cmd /d /s /c ";
 
     private static readonly TimeSpan StaleScriptAge = TimeSpan.FromHours(6);
 
@@ -51,7 +60,7 @@ public sealed class RemoteCommandExecutor
                 StandardOutputEncoding = Utf8NoBom,
                 StandardErrorEncoding = Utf8NoBom,
             };
-            if (isCmd) { psi.ArgumentList.Add("/d"); psi.ArgumentList.Add("/s"); psi.ArgumentList.Add("/c"); psi.ArgumentList.Add(scriptPath!); }
+            if (isCmd) { psi.ArgumentList.Add("/d"); psi.ArgumentList.Add("/s"); psi.ArgumentList.Add("/c"); psi.ArgumentList.Add(CmdPrologue + scriptPath!); }
             else { psi.ArgumentList.Add("-NoProfile"); psi.ArgumentList.Add("-NonInteractive"); psi.ArgumentList.Add("-Command"); psi.ArgumentList.Add("[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " + command); }
 
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
@@ -75,14 +84,14 @@ public sealed class RemoteCommandExecutor
         }
     }
 
-    /// Writes `command` to a freshly created, Agent-owned UTF-8 BOM script.
+    /// Writes `command` to a freshly created, Agent-owned UTF-8 script.
     ///
     /// cmd.exe converts its /c command line to the code page that was active
     /// when it started, so a chcp inside that same line is always too late for
-    /// non-ASCII literals - they arrive already replaced by '?'. A batch file
-    /// carrying a UTF-8 BOM is read as UTF-8 instead, and the chcp written as
-    /// the script's first line takes effect before any command in it runs, so
-    /// built-ins and console-aware children both emit UTF-8.
+    /// non-ASCII literals - they arrive already replaced by '?'. Moving the
+    /// command into a file keeps it off that command line entirely; the outer
+    /// shell switches the console to UTF-8 first, so the inner cmd reads the
+    /// file as UTF-8 and its built-ins and console-aware children both emit it.
     private static string WriteScript(string command)
     {
         var directory = EnsureScriptDirectory();
@@ -100,10 +109,10 @@ public sealed class RemoteCommandExecutor
                 // all, so two concurrent executions can never share a file, and
                 // a pre-planted file or symlink cannot be written through.
                 using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-                using var writer = new StreamWriter(stream, Utf8WithBom);
+                using var writer = new StreamWriter(stream, Utf8NoBom);
                 // @echo off: a batch file echoes each line by default, which
                 // would inject the command text into the caller's stdout.
-                writer.Write("@echo off\r\nchcp 65001>nul\r\n");
+                writer.Write("@echo off\r\n");
                 writer.Write(command);
                 writer.Write("\r\n");
                 return path;
@@ -117,6 +126,10 @@ public sealed class RemoteCommandExecutor
 
     private static string EnsureScriptDirectory()
     {
+        // The path is embedded unquoted in the outer command line, so a space
+        // would split it into two arguments. ProgramData is space-free on every
+        // standard Windows install; fail loudly rather than mis-execute if not.
+        if (ScriptDirectory.Any(char.IsWhiteSpace)) throw new InvalidOperationException("Agent script directory path must not contain whitespace");
         if (Directory.Exists(ScriptDirectory)) return ScriptDirectory;
         Directory.CreateDirectory(Path.GetDirectoryName(ScriptDirectory)!);
         try
