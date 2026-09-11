@@ -9,6 +9,7 @@ import NotFound from '@/pages/not-found';
 import Administration from '@/pages/administration';
 import ComingSoon from '@/pages/coming-soon';
 import DeviceDetail from '@/pages/device-detail';
+import RemoteConsole from '@/pages/remote-console';
 import Devices from '@/pages/devices';
 import Login from '@/pages/login';
 import Organizations from '@/pages/organizations';
@@ -36,6 +37,7 @@ function Router() {
         <Route path="/" component={Overview} />
         <Route path="/devices" component={Devices} />
         <Route path="/devices/:deviceId" component={DeviceDetail} />
+        <Route path="/devices/:deviceId/remote" component={RemoteConsole} />
         <Route path="/organizations" component={Organizations} />
         <Route path="/organizations/:organizationId" component={OrganizationDetail} />
         <Route path="/administration" component={Administration} />
