@@ -71,6 +71,20 @@ public sealed class InteractiveSessionLauncher(ILogger<InteractiveSessionLaunche
         uint creationFlags, IntPtr environment, string? currentDirectory,
         ref STARTUPINFO startupInfo, out PROCESS_INFORMATION processInformation);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetNamedPipeClientProcessId(IntPtr pipe, out uint clientProcessId);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetTokenInformation(IntPtr token, int tokenInformationClass, IntPtr information, int length, out int returnLength);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TOKEN_USER { public SID_AND_ATTRIBUTES User; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SID_AND_ATTRIBUTES { public IntPtr Sid; public uint Attributes; }
+
+    private const int TokenUser = 1;
+
     private const int WTSActive = 0;
     private const uint MAXIMUM_ALLOWED = 0x02000000;
     private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
@@ -236,6 +250,48 @@ public sealed class InteractiveSessionLauncher(ILogger<InteractiveSessionLaunche
         if (index < 0 || index + 1 >= args.Length) return null;
         var name = args[index + 1];
         return IsSafePipeName(name) ? name : null;
+    }
+
+    /// <summary>
+    /// The process id on the other end of a connected named pipe.
+    ///
+    /// .NET does not surface this, but without it the server cannot tell WHICH
+    /// process connected - only that something did. That distinction is the
+    /// whole security of the channel: the pipe name is visible on the helper's
+    /// command line, the server starts listening before the helper exists, and
+    /// only one client may connect, so any process in the session can race to
+    /// be first and would then be handed the handshake nonce.
+    /// </summary>
+    public static uint? ClientProcessId(SafeHandle pipeHandle)
+    {
+        if (pipeHandle is null || pipeHandle.IsInvalid || pipeHandle.IsClosed) return null;
+        return GetNamedPipeClientProcessId(pipeHandle.DangerousGetHandle(), out var clientProcessId) ? clientProcessId : null;
+    }
+
+    /// <summary>
+    /// The actual user SID owning an interactive session, so the pipe can be
+    /// granted to exactly that account rather than to every interactive user.
+    /// </summary>
+    public static SecurityIdentifier? SessionUserSid(uint sessionId)
+    {
+        var token = IntPtr.Zero;
+        var buffer = IntPtr.Zero;
+        try
+        {
+            if (!WTSQueryUserToken(sessionId, out token)) return null;
+            GetTokenInformation(token, TokenUser, IntPtr.Zero, 0, out var needed);
+            if (needed <= 0) return null;
+            buffer = Marshal.AllocHGlobal(needed);
+            if (!GetTokenInformation(token, TokenUser, buffer, needed, out _)) return null;
+            var user = Marshal.PtrToStructure<TOKEN_USER>(buffer);
+            return user.User.Sid == IntPtr.Zero ? null : new SecurityIdentifier(user.User.Sid);
+        }
+        catch (Exception) { return null; }
+        finally
+        {
+            if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+            if (token != IntPtr.Zero) CloseHandle(token);
+        }
     }
 
     public static bool ProcessIsAlive(int processId)

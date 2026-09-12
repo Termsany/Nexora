@@ -274,6 +274,63 @@ public sealed class HelperLifecycleTests
         Assert.Contains("DisposeAsync", channel);
     }
 
+    // ------------------------------------------- phase-2 gate security fixes
+    [Fact]
+    public void Connected_Client_Is_Identified_By_Process_Id_Not_Just_Liveness()
+    {
+        var channel = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktop/HelperChannel.cs"));
+        // The pipe name is on a world-readable command line and the server
+        // listens before the helper exists, so any process in the session can
+        // race to connect. Because the nonce is sent AFTER accept, a winner
+        // that is not our process would simply be handed it. Comparing the
+        // client pid is what closes that race.
+        Assert.Contains("ClientProcessId(_pipe.SafePipeHandle)", channel);
+        Assert.Contains("client.Value != (uint)_helperProcessId.Value", channel);
+        // Presence of a client is not identity.
+        Assert.DoesNotContain("GetImpersonationUserName", channel);
+
+        var launcher = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktop/InteractiveSessionLauncher.cs"));
+        Assert.Contains("GetNamedPipeClientProcessId", launcher);
+    }
+
+    [Fact]
+    public void Identity_Check_Runs_Before_The_Nonce_Is_Ever_Sent()
+    {
+        var channel = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktop/HelperChannel.cs"));
+        var identity = channel.IndexOf("if (!ClientIsExpectedProcess())", StringComparison.Ordinal);
+        var mint = channel.IndexOf("_nonce = Convert.ToBase64String", StringComparison.Ordinal);
+        Assert.True(identity > 0 && mint > identity,
+            "the nonce must never be sent to a client whose identity has not been proven");
+    }
+
+    [Fact]
+    public void Pipe_Is_Granted_To_The_Session_User_Not_All_Interactive_Users()
+    {
+        var channel = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktop/HelperChannel.cs"));
+        // A session-0 service is never in the target session, so the old
+        // InteractiveSid fallback applied always and granted the pipe to every
+        // interactive user rather than the one being assisted.
+        Assert.DoesNotContain("WellKnownSidType.InteractiveSid", channel);
+        Assert.Contains("InteractiveSessionLauncher.SessionUserSid(sessionId)", channel);
+
+        var launcher = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktop/InteractiveSessionLauncher.cs"));
+        // Resolved from the session's own token, not assumed.
+        Assert.Contains("WTSQueryUserToken", launcher);
+        Assert.Contains("TokenUser", launcher);
+    }
+
+    [Fact]
+    public void Unresolvable_Session_User_Fails_Closed()
+    {
+        var channel = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktop/HelperChannel.cs"));
+        var method = channel[channel.IndexOf("private static SecurityIdentifier? SessionUserSid", StringComparison.Ordinal)..];
+        method = method[..method.IndexOf("\n    }", StringComparison.Ordinal)];
+        // No broad grant anywhere in the fallback path.
+        foreach (var broad in new[] { "InteractiveSid", "AuthenticatedUserSid", "WorldSid", "BuiltinUsersSid" })
+            Assert.DoesNotContain(broad, method);
+        Assert.Contains("return null;", method);
+    }
+
     private static string SourcePath(string relative)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

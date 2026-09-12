@@ -104,22 +104,60 @@ public sealed class HelperChannel(InteractiveSessionLauncher launcher, ILogger<H
             inBufferSize: 64 * 1024, outBufferSize: HelperProtocol.MaxFrameBytes, pipeSecurity: security);
     }
 
+    /// <summary>
+    /// The specific account owning the target session.
+    ///
+    /// Previously this fell back to the well-known Interactive SID whenever
+    /// the service was not itself in the target session - which, for a
+    /// session-0 service, is always. That granted the pipe to every
+    /// interactive user rather than the one whose desktop is being shared.
+    /// Resolving the real SID keeps the grant as narrow as the feature needs.
+    /// </summary>
     private static SecurityIdentifier? SessionUserSid(uint sessionId)
     {
         try
         {
-            // The helper runs as the session's user, so that user must be able
-            // to open the pipe - and only that user.
-            using var identity = WindowsIdentity.GetCurrent();
-            return sessionId == InteractiveSessionLauncher.CurrentSessionId() ? identity.User : new SecurityIdentifier(WellKnownSidType.InteractiveSid, null);
+            var resolved = InteractiveSessionLauncher.SessionUserSid(sessionId);
+            if (resolved is not null) return resolved;
+            // Running interactively (development): the helper is us.
+            if (sessionId == InteractiveSessionLauncher.CurrentSessionId())
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                return identity.User;
+            }
+            // Deliberately no broad fallback. Without a specific account the
+            // pipe stays SYSTEM/Administrators only and the launch fails
+            // closed rather than opening up to all interactive users.
+            return null;
         }
         catch (Exception) { return null; }
     }
 
+    /// <summary>
+    /// The connected client must be the exact process we launched.
+    ///
+    /// This is the load-bearing check, not a refinement of the nonce. The pipe
+    /// name appears on the helper's command line, which any process can read;
+    /// the server starts listening before the helper exists; and only one
+    /// client may connect. So a process running as the session user can race
+    /// to connect first - and because the server sends the nonce AFTER the
+    /// connection is accepted, a weaker check would hand that impostor the
+    /// nonce and let it echo it back. It could then feed the operator a
+    /// fabricated desktop while receiving everything the operator types.
+    ///
+    /// Comparing the client process id closes that race outright: an impostor
+    /// cannot be the process id we just created.
+    /// </summary>
     private bool ClientIsExpectedProcess()
     {
         if (_pipe is null || _helperProcessId is null) return false;
-        try { return _pipe.GetImpersonationUserName() is not null && InteractiveSessionLauncher.ProcessIsAlive(_helperProcessId.Value); }
+        try
+        {
+            var client = InteractiveSessionLauncher.ClientProcessId(_pipe.SafePipeHandle);
+            if (client is null) return false;                       // cannot prove it: refuse
+            if (client.Value != (uint)_helperProcessId.Value) return false;
+            return InteractiveSessionLauncher.ProcessIsAlive(_helperProcessId.Value);
+        }
         catch (Exception) { return false; }
     }
 
