@@ -26,10 +26,18 @@ public sealed class RemoteDesktopService(
     NexoraApiClient api,
     AgentSigningService signing,
     AgentOptions options,
+    InteractiveSessionLauncher launcher,
+    SessionChangeNotifier sessionChanges,
+    ILoggerFactory loggerFactory,
     ILogger<RemoteDesktopService> logger)
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
     private const int MaxControlBytes = 8 * 1024;
+    // A stable support experience beats an unstable fast one; these bound both
+    // encode cost on the endpoint and bandwidth on the wire.
+    private const int CaptureFps = 12;
+    private const int CaptureQuality = 60;
+    private const int CaptureMaxWidth = 1600;
 
     public async Task RunAsync(StoredCredentials credentials, CancellationToken cancellationToken)
     {
@@ -88,27 +96,18 @@ public sealed class RemoteDesktopService(
         {
             await SendControlAsync(socket, new { type = "agent.hello", protocol = "nexora-remote-desktop-v1", agentVersion = AgentVersion.Current }, session.Token);
 
-            // Refuse to stream rather than send black frames from session 0.
-            var blocked = DesktopSession.BlockingReason();
-            if (blocked is not null)
-            {
-                await SendControlAsync(socket, new { type = "agent.error", code = blocked }, session.Token);
-                await CloseAsync(socket, "capture unavailable");
-                return;
-            }
-
-            using var capture = new ScreenCapture(maxWidth: 1600, quality: 60);
-            var injector = new InputInjector(capture.Width, capture.Height);
-            await SendControlAsync(socket, new { type = "agent.desktop.info", width = capture.Width, height = capture.Height, displays = capture.Displays }, session.Token);
-
-            // Input is read on its own loop so a slow or large frame encode can
-            // never delay a mouse or key event - responsiveness under load is
-            // the whole point of splitting these.
-            var receiving = ReceiveLoopAsync(socket, injector, capture, session, cancellationToken);
-            var streaming = StreamLoopAsync(socket, capture, session.Token);
-            await Task.WhenAny(receiving, streaming);
-            session.Cancel();
-            await Task.WhenAll(SafeAsync(receiving), SafeAsync(streaming));
+            // A service in session 0 has no desktop of its own, so capture runs
+            // in a helper launched into the interactive session. Running
+            // interactively (development, CI) there is nothing to hand off to -
+            // and CreateProcessAsUser would not be permitted anyway - so the
+            // same code captures in-process.
+            //
+            // Session-0 capture is never faked: if no interactive session can
+            // be selected, the helper path reports the reason and stops.
+            if (DesktopSession.IsIsolatedFromInteractiveDesktop())
+                await RunViaHelperAsync(socket, session, cancellationToken);
+            else
+                await RunInProcessAsync(socket, session, cancellationToken);
         }
         catch (Exception ex) { logger.LogWarning(ex, "RemoteDesktopSessionFailed"); }
         finally
@@ -118,10 +117,162 @@ public sealed class RemoteDesktopService(
         }
     }
 
+    /// <summary>
+    /// Service mode. The desktop lives in another session, so a helper is
+    /// started there and this loop simply relays: frames out to Nexora, input
+    /// in to the helper. The helper never sees the Remote Desktop protocol.
+    /// </summary>
+    private async Task RunViaHelperAsync(ClientWebSocket socket, CancellationTokenSource session, CancellationToken cancellationToken)
+    {
+        string? endReason = null;
+        await using var helper = new HelperChannel(launcher, loggerFactory.CreateLogger<HelperChannel>());
+        var failure = await helper.StartAsync(session.Token);
+        if (failure is not null)
+        {
+            // Report the true reason instead of streaming a black desktop.
+            await SendControlAsync(socket, new { type = "agent.error", code = failure }, session.Token);
+            await CloseAsync(socket, "capture unavailable");
+            return;
+        }
+
+        await helper.SendAsync(new HelperMessage
+        {
+            Type = HelperProtocol.CaptureStart, Fps = CaptureFps, Quality = CaptureQuality, MaxWidth = CaptureMaxWidth,
+        }, session.Token);
+
+        // React the instant Windows tells us, rather than waiting for the
+        // supervision tick. Lock counts: the lock screen is a separate secure
+        // desktop the helper cannot capture, so the session ends cleanly.
+        void OnSessionChange(InteractiveSessionEvent change, uint sessionId)
+        {
+            if (!SessionChangeNotifier.EndsRemoteDesktop(change)) return;
+            if (helper.Session is not null && sessionId != 0 && sessionId != helper.Session.SessionId) return;
+            logger.LogInformation("RemoteDesktopSessionEnding Reason={Reason}", SessionChangeNotifier.ReasonCode(change));
+            endReason = SessionChangeNotifier.ReasonCode(change);
+            session.Cancel();
+        }
+        sessionChanges.Changed += OnSessionChange;
+
+        var fromHelper = PumpHelperAsync(socket, helper, session);
+        var fromServer = ReceiveLoopAsync(socket, input => ForwardToHelper(helper, input, session.Token), session, cancellationToken);
+        var supervising = SuperviseHelperAsync(socket, helper, session);
+        try
+        {
+            await Task.WhenAny(fromHelper, fromServer, supervising);
+        }
+        finally
+        {
+            sessionChanges.Changed -= OnSessionChange;
+            session.Cancel();
+            await Task.WhenAll(SafeAsync(fromHelper), SafeAsync(fromServer), SafeAsync(supervising));
+        }
+        if (endReason is not null) await SendControlAsync(socket, new { type = "agent.error", code = endReason }, CancellationToken.None);
+    }
+
+    /// <summary>Frames and status from the helper, relayed onto the session socket.</summary>
+    private async Task PumpHelperAsync(ClientWebSocket socket, HelperChannel helper, CancellationTokenSource session)
+    {
+        var buffer = new byte[4];
+        uint sequence = 0;
+        while (!session.IsCancellationRequested && socket.State == WebSocketState.Open)
+        {
+            var (control, frame) = await helper.ReadAsync(session.Token);
+            if (control is null && frame is null)
+            {
+                // Pipe ended. Distinguish a clean stop from a crash so the
+                // viewer is told something true.
+                var reason = helper.FailureReason ?? (helper.HelperAlive ? "helper_channel_closed" : "helper_exited");
+                await SendControlAsync(socket, new { type = "agent.error", code = reason }, CancellationToken.None);
+                return;
+            }
+            if (frame is not null)
+            {
+                BinaryPrimitives.WriteUInt32BigEndian(buffer, unchecked(sequence++));
+                var payload = new byte[buffer.Length + frame.Length];
+                buffer.CopyTo(payload, 0);
+                frame.CopyTo(payload, buffer.Length);
+                try { await socket.SendAsync(payload, WebSocketMessageType.Binary, true, session.Token); }
+                catch (Exception) { return; }
+                continue;
+            }
+            switch (control!.Type)
+            {
+                case HelperProtocol.DesktopInfo:
+                    await SendControlAsync(socket, new { type = "agent.desktop.info", width = control.Width, height = control.Height, displays = control.Displays }, session.Token);
+                    break;
+                case HelperProtocol.Error:
+                    await SendControlAsync(socket, new { type = "agent.error", code = control.Reason ?? "helper_error" }, session.Token);
+                    return;
+                case HelperProtocol.Closed:
+                    return;
+                default:
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Detect a helper that died or a session that went away. This is what
+    /// stops a crashed helper from leaving the viewer staring at a frozen
+    /// last frame, and what guarantees no orphan survives the session.
+    /// </summary>
+    private async Task SuperviseHelperAsync(ClientWebSocket socket, HelperChannel helper, CancellationTokenSource session)
+    {
+        while (!session.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), session.Token);
+            if (!helper.HelperAlive)
+            {
+                logger.LogWarning("RemoteDesktopHelperExited");
+                await SendControlAsync(socket, new { type = "agent.error", code = "helper_exited" }, CancellationToken.None);
+                return;
+            }
+            // The interactive session can disappear under us - logoff, switch,
+            // or a lock that ends the console session.
+            var current = launcher.SelectActiveSession(out var reason);
+            if (current is null || current.SessionId != helper.Session?.SessionId)
+            {
+                logger.LogInformation("RemoteDesktopSessionChanged Reason={Reason}", reason);
+                await SendControlAsync(socket, new { type = "agent.error", code = current is null ? reason : "interactive_session_changed" }, CancellationToken.None);
+                return;
+            }
+        }
+    }
+
+    private static void ForwardToHelper(HelperChannel helper, InputEvent input, CancellationToken token)
+    {
+        // Translated again, into the helper's own small vocabulary. Nothing
+        // from the wire is forwarded verbatim at any hop.
+        var message = input.Kind switch
+        {
+            "mouse_move" => new HelperMessage { Type = HelperProtocol.InputMouse, Action = "move", X = input.X, Y = input.Y },
+            "mouse_button" => new HelperMessage { Type = HelperProtocol.InputMouse, Action = "button", X = input.X, Y = input.Y, Button = input.Button, Pressed = input.Pressed },
+            "mouse_wheel" => new HelperMessage { Type = HelperProtocol.InputMouse, Action = "wheel", X = input.X, Y = input.Y, DeltaY = input.DeltaY },
+            "key" => new HelperMessage { Type = HelperProtocol.InputKeyboard, Code = input.Code, Pressed = input.Pressed },
+            _ => null,
+        };
+        if (message is null || !message.IsValidFromService()) return;
+        _ = helper.SendAsync(message, token);
+    }
+
+    /// <summary>Interactive mode (development and CI): capture in this process.</summary>
+    private async Task RunInProcessAsync(ClientWebSocket socket, CancellationTokenSource session, CancellationToken cancellationToken)
+    {
+        using var capture = new ScreenCapture(CaptureMaxWidth, CaptureQuality);
+        var injector = new InputInjector(capture.Width, capture.Height);
+        await SendControlAsync(socket, new { type = "agent.desktop.info", width = capture.Width, height = capture.Height, displays = capture.Displays }, session.Token);
+
+        var receiving = ReceiveLoopAsync(socket, input => Apply(injector, capture, input), session, cancellationToken);
+        var streaming = StreamLoopAsync(socket, capture, session.Token);
+        await Task.WhenAny(receiving, streaming);
+        session.Cancel();
+        await Task.WhenAll(SafeAsync(receiving), SafeAsync(streaming));
+    }
+
     /// <summary>Capture, encode, send. Frame pacing adapts when encoding runs long.</summary>
     private async Task StreamLoopAsync(ClientWebSocket socket, ScreenCapture capture, CancellationToken token)
     {
-        var frameInterval = TimeSpan.FromMilliseconds(1000d / 12);
+        var frameInterval = TimeSpan.FromMilliseconds(1000d / CaptureFps);
         uint sequence = 0;
         var consecutiveFailures = 0;
         var buffer = new byte[4];
@@ -156,7 +307,7 @@ public sealed class RemoteDesktopService(
         }
     }
 
-    private async Task ReceiveLoopAsync(ClientWebSocket socket, InputInjector injector, ScreenCapture capture, CancellationTokenSource session, CancellationToken token)
+    private async Task ReceiveLoopAsync(ClientWebSocket socket, Action<InputEvent> onInput, CancellationTokenSource session, CancellationToken token)
     {
         var buffer = new byte[MaxControlBytes];
         while (!token.IsCancellationRequested && socket.State == WebSocketState.Open)
@@ -185,7 +336,7 @@ public sealed class RemoteDesktopService(
                     await SendControlAsync(socket, new { type = "agent.pong" }, token);
                     break;
                 case "agent.input":
-                    if (message.Event is not null) Apply(injector, capture, message.Event);
+                    if (message.Event is not null) onInput(message.Event);
                     break;
                 default:
                     // Unknown server message: ignore rather than guess.
@@ -249,7 +400,7 @@ public sealed class RemoteDesktopService(
         [JsonPropertyName("event")] public InputEvent? Event { get; set; }
     }
 
-    private sealed class InputEvent
+    internal sealed class InputEvent
     {
         [JsonPropertyName("kind")] public string Kind { get; set; } = "";
         [JsonPropertyName("x")] public double X { get; set; }

@@ -54,16 +54,29 @@ public sealed class RemoteDesktopAgentTests
     }
 
     [Fact]
-    public void Capture_Refuses_Rather_Than_Streaming_Black_Frames()
+    public void Session0_Is_Routed_To_The_Helper_Instead_Of_Capturing_Blind()
     {
         var service = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktopService.cs"));
-        // A session-0 service sees a black desktop; reporting it is the only
-        // honest behaviour, so the guard must be consulted before capture.
-        Assert.Contains("DesktopSession.BlockingReason()", service);
+        // In session 0 the service must hand off, not capture. Capturing there
+        // returns a black image while appearing to succeed.
+        Assert.Contains("DesktopSession.IsIsolatedFromInteractiveDesktop()", service);
+        Assert.Contains("RunViaHelperAsync", service);
+        var branch = service.IndexOf("IsIsolatedFromInteractiveDesktop()", StringComparison.Ordinal);
+        var inProcess = service.IndexOf("RunInProcessAsync(socket", StringComparison.Ordinal);
+        Assert.True(branch > 0 && inProcess > branch, "the isolation branch must gate in-process capture");
+    }
+
+    [Fact]
+    public void Helper_Failure_Is_Reported_Rather_Than_Substituted_With_A_Frame()
+    {
+        var service = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktopService.cs"));
+        // When no helper can be started the viewer is told why; no frame is sent.
         Assert.Contains("agent.error", service);
-        var blockIndex = service.IndexOf("BlockingReason()", StringComparison.Ordinal);
-        var captureIndex = service.IndexOf("new ScreenCapture(", StringComparison.Ordinal);
-        Assert.True(blockIndex > 0 && captureIndex > blockIndex, "the isolation guard must run before capture starts");
+        var helper = File.ReadAllText(SourcePath("Nexora.Agent/Services/RemoteDesktop/HelperHost.cs"));
+        // A failed capture must never be replaced by a fabricated image.
+        foreach (var fabricated in new[] { "new Bitmap(", "Clear(Color", "FillRectangle" })
+            Assert.DoesNotContain(fabricated, helper);
+        Assert.Contains("desktop_unavailable", helper);
     }
 
     [Fact]
@@ -90,7 +103,8 @@ public sealed class RemoteDesktopAgentTests
         var method = typeof(RemoteDesktopService).GetMethod("BuildChannelUri", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(method);
         var options = new Nexora.Agent.Configuration.AgentOptions("https://nexora.example.test/api/", null);
-        var service = (RemoteDesktopService)Activator.CreateInstance(typeof(RemoteDesktopService), null!, null!, options, null!)!;
+        var service = (RemoteDesktopService)Activator.CreateInstance(
+            typeof(RemoteDesktopService), null!, null!, options, null!, null!, null!, null!)!;
 
         var secure = method!.Invoke(service, ["/api/v1/agent/remote-desktop/abc/channel"]) as Uri;
         Assert.Equal("wss://nexora.example.test/api/v1/agent/remote-desktop/abc/channel", secure?.ToString());

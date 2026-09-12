@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Hosting;
 using Nexora.Agent.Collectors;
 using Nexora.Agent.Configuration;
 using Nexora.Agent.Security;
 using Nexora.Agent.Services;
+using Nexora.Agent.Services.RemoteDesktop;
 
 if (args.Contains("--configure", StringComparer.OrdinalIgnoreCase))
 {
@@ -11,8 +14,27 @@ if (args.Contains("--configure", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
+// Remote Desktop interactive helper. Runs in the logged-in user's session,
+// started by the service because a session-0 service has no desktop of its
+// own. It builds no host, loads no configuration, reads no credentials and
+// opens no network client - its only channel is the pipe named on the command
+// line, and it exits the moment that pipe closes.
+if (InteractiveSessionLauncher.IsHelperInvocation(args))
+{
+    Environment.ExitCode = await HelperHost.RunAsync(args);
+    return;
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "NexoraAgent");
+// Session-change notifications are opt-in on ServiceBase, and Remote Desktop
+// needs them to react to logoff/lock immediately instead of on a poll tick.
+builder.Services.AddSingleton<SessionChangeNotifier>();
+if (OperatingSystem.IsWindows() && WindowsServiceHelpers.IsWindowsService())
+{
+    builder.Services.RemoveAll<IHostLifetime>();
+    builder.Services.AddSingleton<IHostLifetime, NexoraServiceLifetime>();
+}
 builder.Services.AddSingleton(AgentConfiguration.Load());
 builder.Services.AddSingleton<IDataProtector, DpapiDataProtector>();
 builder.Services.AddSingleton<SecureStorageService>();
@@ -44,6 +66,7 @@ builder.Services.AddSingleton<ServiceInventoryService>();
 builder.Services.AddSingleton<ProcessInventoryService>();
 builder.Services.AddSingleton<RemoteCommandExecutor>();
 builder.Services.AddSingleton<RemoteCommandService>();
+builder.Services.AddSingleton<InteractiveSessionLauncher>();
 builder.Services.AddSingleton<RemoteDesktopService>();
 builder.Services.AddHostedService<AgentWorker>();
 await builder.Build().RunAsync();
