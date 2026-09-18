@@ -12,5 +12,5 @@ public sealed record AgentOptions(
 
 public static class AgentVersion
 {
-    public const string Current = "0.3.0";
+    public const string Current = "0.3.1";
 }

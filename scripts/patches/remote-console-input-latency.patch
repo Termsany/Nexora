@@ -1,0 +1,313 @@
+--- a/artifacts/nexora/src/pages/remote-console.tsx
++++ b/artifacts/nexora/src/pages/remote-console.tsx
+@@ -6,6 +6,7 @@
+ import { InlineNotice, Panel, PanelHeading } from '@/components/console-ui';
+ import { apiRequest } from '@/lib/api';
+ import { useCapability } from '@/lib/session';
++import { LatestFrameQueue } from '@/lib/latest-frame';
+ 
+ /**
+  * Nexora Remote Console.
+@@ -63,6 +64,9 @@
+   // embedded viewport in Device Details behaves exactly as it does today.
+   const [isFullscreen, setIsFullscreen] = useState(false);
+   const [elapsed, setElapsed] = useState(0);
++  const [gatewayRtt, setGatewayRtt] = useState<number | null>(null);
++  const frameQueueRef = useRef<LatestFrameQueue<ArrayBuffer> | null>(null);
++  const pingRef = useRef<number | null>(null);
+ 
+   const socketRef = useRef<WebSocket | null>(null);
+   // Enough to re-open the SAME session after a transport blip. Never a new
+@@ -91,23 +95,25 @@
+   }, [remote, canRequest]);
+ 
+   // ------------------------------------------------------------ frame paint
+-  const paint = useCallback(async (payload: ArrayBuffer) => {
++  const paint = useCallback(async (payload: ArrayBuffer, isCurrent: () => boolean) => {
+     const canvas = canvasRef.current;
+     if (!canvas || payload.byteLength <= 4) return;
+     // 4-byte big-endian sequence header, then the encoded image.
+     const image = payload.slice(4);
++    const bitmap = await createImageBitmap(new Blob([image], { type: 'image/jpeg' }));
+     try {
+-      const bitmap = await createImageBitmap(new Blob([image], { type: 'image/jpeg' }));
++      if (!isCurrent() || canvasRef.current !== canvas) return;
+       if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+         canvas.width = bitmap.width; canvas.height = bitmap.height;
+       }
+       canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+-      bitmap.close();
+-    } catch { /* a corrupt frame is dropped; the next one repaints */ }
++    } finally { bitmap.close(); }
+   }, []);
+ 
+   // --------------------------------------------------------------- teardown
+   const disconnect = useCallback((reason?: string) => {
++    frameQueueRef.current?.dispose();
++    frameQueueRef.current = null;
+     intentionalRef.current = true;
+     attachRef.current = null;
+     const socket = socketRef.current;
+@@ -121,7 +127,35 @@
+     if (reason) setNotice(reason);
+   }, []);
+ 
+-  useEffect(() => () => { try { socketRef.current?.close(); } catch { /* unmount */ } }, []);
++  useEffect(() => () => {
++    frameQueueRef.current?.dispose();
++    const socket = socketRef.current;
++    socketRef.current = null;
++    intentionalRef.current = true;
++    attachRef.current = null;
++    try { socket?.close(); } catch { /* unmount */ }
++  }, []);
++
++  // Measures browser <-> gateway only, not Agent input or display latency.
++  useEffect(() => {
++    setGatewayRtt(null);
++    pingRef.current = null;
++    if (phase !== 'live') return;
++    const timer = window.setInterval(() => {
++      const socket = socketRef.current;
++      if (!socket || socket.readyState !== WebSocket.OPEN) return;
++      if (pingRef.current !== null) {
++        if (performance.now() - pingRef.current < 5000) return;
++        pingRef.current = null;
++        setGatewayRtt(null);
++      }
++      if (socket.bufferedAmount > 0) return;
++      const t = performance.now();
++      try { socket.send(JSON.stringify({ type: 'session.ping', t })); pingRef.current = t; }
++      catch { /* closing */ }
++    }, 2000);
++    return () => window.clearInterval(timer);
++  }, [phase]);
+ 
+   // Session timer, purely cosmetic but it makes an open session visible.
+   useEffect(() => {
+@@ -133,6 +167,7 @@
+ 
+   // ------------------------------------------------------------ open socket
+   const openSocket = useCallback((sessionId: string, token: string) => {
++    frameQueueRef.current?.dispose();
+     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+     // The token travels as a WebSocket subprotocol, not a query parameter: a
+     // query string is written verbatim into nginx's logs and kept in browser
+@@ -143,6 +178,9 @@
+     );
+     socket.binaryType = 'arraybuffer';
+     socketRef.current = socket;
++    const frames = new LatestFrameQueue<ArrayBuffer>(payload => paint(payload,
++      () => socketRef.current === socket && socket.readyState === WebSocket.OPEN));
++    frameQueueRef.current = frames;
+     attachRef.current = { sessionId, token };
+     setPhase('connecting');
+ 
+@@ -151,12 +189,13 @@
+       socket.send(JSON.stringify({ type: 'session.hello', protocol: 'nexora-remote-desktop-v1' }));
+     };
+     socket.onmessage = (event) => {
++      if (socketRef.current !== socket) return;
+       if (event.data instanceof ArrayBuffer) {
+         // A frame is proof the Agent is attached and capturing. Any earlier
+         // transient error (input sent before the Agent claimed the session,
+         // or a rate-limit burst) is now stale and must not keep accusing the
+         // Agent of being disconnected while its desktop is on screen.
+-        void paint(event.data);
++        frames.offer(event.data);
+         if (transientNotice.current) { transientNotice.current = false; setNotice(undefined); }
+         setPhase('live');
+         return;
+@@ -164,6 +203,12 @@
+       let message: { type: string; [key: string]: unknown };
+       try { message = JSON.parse(String(event.data)); } catch { return; }
+       switch (message.type) {
++        case 'session.pong':
++          if (typeof message.t === 'number' && message.t === pingRef.current) {
++            setGatewayRtt(Math.round(performance.now() - message.t));
++            pingRef.current = null;
++          }
++          break;
+         case 'session.accepted': setNotice(undefined); break;
+         case 'desktop.info': setScreen({ width: Number(message.width), height: Number(message.height) }); break;
+         case 'session.status': if (message.state === 'ACTIVE') setPhase('live'); break;
+@@ -173,12 +218,14 @@
+           setNotice(`Session error: ${String(message.code).replaceAll('_', ' ')}`);
+           break;
+         case 'session.rejected': setNotice(`Rejected: ${String(message.reason).replaceAll('_', ' ')}`); setPhase('error'); break;
+-        case 'session.closed': setNotice(`Session closed: ${String(message.reason).replaceAll('_', ' ')}`); setPhase('closed'); break;
++        case 'session.closed': frames.dispose(); setNotice(`Session closed: ${String(message.reason).replaceAll('_', ' ')}`); setPhase('closed'); break;
+         default: break;
+       }
+     };
+     socket.onerror = () => { setNotice('Connection error.'); setPhase('error'); };
+     socket.onclose = (event) => {
++      frames.dispose();
++      if (socketRef.current !== socket) return;
+       socketRef.current = null;
+       const target = attachRef.current;
+       // 1006 means the transport died without a close frame. The server holds
+@@ -357,7 +404,7 @@
+           <span className="text-[12px] font-semibold text-primary" data-testid="text-console-device">{header}</span>
+           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground" data-testid="text-console-status">
+             <span className={`h-2 w-2 rounded-full ${statusTone}`} aria-hidden />
+-            {PHASE_LABEL[phase]}{live ? ` · ${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : ''}
++            {PHASE_LABEL[phase]}{live ? ` · ${Math.floor(elapsed / 60)}m ${elapsed % 60}s · Gateway RTT: ${gatewayRtt === null ? 'Unavailable' : `${gatewayRtt} ms`}` : ''}
+           </span>
+           {screen && (
+             <span className="text-[11px] text-muted-foreground" data-testid="text-console-resolution">
+@@ -458,7 +505,7 @@
+         action={
+           <div className="flex items-center gap-2">
+             <span className="rounded-md border border-border bg-card px-3 py-2 text-[10px] font-semibold text-muted-foreground" data-testid="text-remote-phase">
+-              {PHASE_LABEL[phase]}{live ? ` · ${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : ''}
++              {PHASE_LABEL[phase]}{live ? ` · ${Math.floor(elapsed / 60)}m ${elapsed % 60}s · Gateway RTT: ${gatewayRtt === null ? 'Unavailable' : `${gatewayRtt} ms`}` : ''}
+             </span>
+             {live && <button type="button" onClick={() => setFit((value) => !value)} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-[10px] font-semibold" data-testid="button-remote-scale"><ScanLine size={14} />{fit ? 'Fit' : '1:1'}</button>}
+             {live && <button type="button" onClick={fullscreen} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-[10px] font-semibold" data-testid="button-remote-fullscreen"><Maximize2 size={14} />Fullscreen</button>}
+--- a/artifacts/nexora/src/pages/standalone-console.test.mjs
++++ b/artifacts/nexora/src/pages/standalone-console.test.mjs
+@@ -73,9 +73,11 @@
+   ]) assert.match(console_, new RegExp(id), `toolbar is missing ${id}`);
+ });
+ 
+-test("no fabricated latency figure is displayed", () => {
+-  const branch = console_.slice(console_.indexOf("if (standalone) {"), console_.indexOf("  return (\n    <AppShell"));
+-  assert.ok(!/\bms\b/.test(branch), "V1 must not invent a latency number");
++test("latency display is a matched gateway ping measurement, not Agent latency", () => {
++  assert.match(console_, /message\.t === pingRef\.current/);
++  assert.match(console_, /setGatewayRtt\(Math\.round\(performance\.now\(\) - message\.t\)\)/);
++  assert.match(console_, /Gateway RTT:/);
++  assert.match(console_, /gatewayRtt === null \? 'Unavailable'/);
+ });
+ 
+ // -------------------------------------------------------------------- scaling
+@@ -115,9 +117,11 @@
+   assert.equal((console_.match(/window\.addEventListener\('keyup'/g) || []).length, 1);
+ });
+ 
+-test("frames are painted directly, with no browser-side frame queue", () => {
+-  assert.match(console_, /void paint\(event\.data\)/);
+-  assert.ok(!/frameQueue|pendingFrames|frameBuffer/.test(console_), "buffering frames in React would re-add latency");
++test("decoder uses one latest-frame slot, never an unbounded decode per message", () => {
++  assert.match(console_, /new LatestFrameQueue<ArrayBuffer>/);
++  assert.match(console_, /frames\.offer\(event\.data\)/);
++  assert.doesNotMatch(console_, /void paint\(event\.data\)/);
++  assert.match(console_, /frames\.dispose\(\)/);
+ });
+ 
+ test("a genuine terminal failure is still surfaced", () => {
+--- /dev/null
++++ b/artifacts/nexora/src/pages/frame-paint.test.mjs
+@@ -0,0 +1,38 @@
++import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
++import test from 'node:test';
++import vm from 'node:vm';
++import ts from 'typescript';
++
++const source = readFileSync(new URL('./remote-console.tsx', import.meta.url), 'utf8');
++const ast = ts.createSourceFile('console.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
++let paint;
++function visit(node) {
++  if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'paint') paint = node.initializer.arguments[0];
++  ts.forEachChild(node, visit);
++}
++visit(ast);
++assert.ok(paint);
++function setup() {
++  let resolve, drawn = 0, closed = 0;
++  const bitmap = { width: 100, height: 100, close() { closed++; } };
++  const canvasRef = { current: { width: 100, height: 100, getContext: () => ({ drawImage() { drawn++; } }) } };
++  const js = ts.transpileModule(`const fn = ${paint.getText(ast)}; fn;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
++  const fn = vm.runInNewContext(js, { canvasRef, Blob, createImageBitmap: () => new Promise(r => { resolve = r; }) });
++  return { fn, canvasRef, finish: () => resolve(bitmap), drawn: () => drawn, closed: () => closed };
++}
++test('frame from a disconnected socket cannot paint after decode completes', async () => {
++  const h = setup(); let current = true;
++  const done = h.fn(new ArrayBuffer(10), () => current);
++  current = false; h.finish(); await done;
++  assert.equal(h.drawn(), 0); assert.equal(h.closed(), 1);
++});
++test('a replaced canvas cannot receive a stale decode', async () => {
++  const h = setup(); const done = h.fn(new ArrayBuffer(10), () => true);
++  h.canvasRef.current = null; h.finish(); await done;
++  assert.equal(h.drawn(), 0); assert.equal(h.closed(), 1);
++});
++test('current frame paints once and releases its bitmap', async () => {
++  const h = setup(); const done = h.fn(new ArrayBuffer(10), () => true);
++  h.finish(); await done; assert.equal(h.drawn(), 1); assert.equal(h.closed(), 1);
++});
+--- /dev/null
++++ b/artifacts/nexora/src/lib/latest-frame.ts
+@@ -0,0 +1,38 @@
++/** One decode in flight and one replaceable pending frame; no FIFO of stale images. */
++export class LatestFrameQueue<T> {
++  private pending: { value: T } | undefined;
++  private busy = false;
++  private closed = false;
++  received = 0;
++  rendered = 0;
++  dropped = 0;
++  failed = 0;
++  decodeMs = 0;
++
++  private readonly consume: (value: T) => Promise<void>;
++  constructor(consume: (value: T) => Promise<void>) { this.consume = consume; }
++
++  offer(value: T): void {
++    if (this.closed) return;
++    this.received++;
++    if (this.pending) this.dropped++;
++    this.pending = { value };
++    if (!this.busy) void this.drain();
++  }
++
++  dispose(): void { this.closed = true; this.pending = undefined; }
++
++  private async drain(): Promise<void> {
++    this.busy = true;
++    try {
++      while (!this.closed && this.pending) {
++        const item = this.pending;
++        this.pending = undefined;
++        const start = performance.now();
++        try { await this.consume(item.value); if (!this.closed) this.rendered++; }
++        catch { if (!this.closed) this.failed++; }
++        this.decodeMs = performance.now() - start;
++      }
++    } finally { this.busy = false; }
++  }
++}
+--- /dev/null
++++ b/artifacts/nexora/src/lib/latest-frame.test.mjs
+@@ -0,0 +1,29 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { LatestFrameQueue } from './latest-frame.ts';
++const tick = () => new Promise(resolve => setImmediate(resolve));
++
++test('one decoder and one latest pending frame under overload', async () => {
++  const decoded = [], releases = [];
++  const queue = new LatestFrameQueue(frame => { decoded.push(frame); return new Promise(resolve => releases.push(resolve)); });
++  for (let i = 0; i < 100; i++) queue.offer(i);
++  assert.deepEqual(decoded, [0]);
++  releases.shift()(); await tick();
++  assert.deepEqual(decoded, [0, 99]);
++  releases.shift()(); await tick();
++  assert.equal(queue.rendered, 2); assert.equal(queue.dropped, 98);
++});
++
++test('decode error does not block the next frame', async () => {
++  const queue = new LatestFrameQueue(async value => { if (value === 1) throw new Error('invalid jpeg'); });
++  queue.offer(1); queue.offer(2); await tick();
++  assert.equal(queue.failed, 1); assert.equal(queue.rendered, 1);
++});
++
++test('dispose discards pending work and ignores future frames', async () => {
++  let release;
++  const decoded = [];
++  const queue = new LatestFrameQueue(frame => { decoded.push(frame); return new Promise(resolve => { release = resolve; }); });
++  queue.offer(1); queue.offer(2); queue.dispose(); queue.offer(3); release(); await tick();
++  assert.deepEqual(decoded, [1]); assert.equal(queue.rendered, 0);
++});

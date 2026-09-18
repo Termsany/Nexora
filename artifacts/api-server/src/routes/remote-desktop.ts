@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db, devicesTable, remoteDesktopSessionsTable } from "@workspace/db";
 import { requirePermission, requireTenantContext } from "../tenancy/context.ts";
@@ -9,17 +9,14 @@ import { recordAudit } from "../tenancy/audit.ts";
 import { signedAgent } from "./remote-commands.ts";
 import { terminateBridge } from "../remote-desktop/gateway.ts";
 import {
-  claimForAgent, closeSession, createSession, getSession, isExpired,
+  claimForAgent, closeSession, createSession, getSession, isExpired, LIVE_STATUSES,
 } from "../remote-desktop/sessions.ts";
 
 /**
  * Remote Desktop REST surface.
  *
- * Session creation goes through a privileged action, so approval policy -
- * including two-person where configured - is inherited from the existing
- * workflow rather than reimplemented here. Promotion to AUTHORIZED happens in
- * routes/security.ts when that action is approved, exactly as remote commands
- * are promoted to READY.
+ * Direct support access is Remote Desktop-specific. A privileged action is
+ * retained for audit; generic approval and Remote Command policy are unchanged.
  */
 
 const router: IRouter = Router();
@@ -33,7 +30,7 @@ router.get("/v1/devices/:id/remote-desktop", requireTenantContext, requirePermis
   if (!device) { res.status(404).json({ error: "Not found" }); return; }
   const capabilities = Array.isArray(device.capabilities) ? device.capabilities as string[] : [];
   const [live] = await db.select().from(remoteDesktopSessionsTable)
-    .where(and(eq(remoteDesktopSessionsTable.deviceId, device.id), eq(remoteDesktopSessionsTable.status, "ACTIVE")))
+    .where(and(eq(remoteDesktopSessionsTable.deviceId, device.id), inArray(remoteDesktopSessionsTable.status, [...LIVE_STATUSES])))
     .limit(1);
   res.json({
     device_id: device.id,
@@ -71,13 +68,20 @@ router.patch("/v1/devices/:id/remote-desktop", requireTenantContext, requirePerm
  * Request a session. Returns the viewer token exactly once; it is stored only
  * as a hash and cannot be retrieved again.
  */
-router.post("/v1/remote-desktop/sessions", requireTenantContext, requirePermission("privileged_actions.request"), async (req, res): Promise<void> => {
+router.post("/v1/remote-desktop/sessions", requireTenantContext, async (req, res): Promise<void> => {
   const context = req.tenant!;
+  if (!context.userId || !hasPermission(context, "remote_desktop.connect")) {
+    await recordAudit({ action: "REMOTE_DESKTOP_REQUESTED", context, result: "DENIED", req, metadata: { reason: "permission_denied", authorization_mode: "DIRECT_SUPPORT" } });
+    res.status(403).json({ error: "Remote Desktop permission required", code: "permission_denied" }); return;
+  }
   const body = z.object({ device_id: uuid, reason: z.string().trim().min(1).max(512) }).strict().safeParse(req.body);
   if (!body.success || !context.userId) { res.status(400).json({ error: "Invalid remote desktop session request" }); return; }
 
   const device = await findDeviceInScope(context, body.data.device_id);
-  if (!device) { res.status(404).json({ error: "Not found" }); return; }
+  if (!device || !hasPermission(context, "remote_desktop.connect", device.organizationId)) {
+    await recordAudit({ action: "REMOTE_DESKTOP_REQUESTED", context, result: "DENIED", req, metadata: { reason: "not_found", authorization_mode: "DIRECT_SUPPORT" } });
+    res.status(404).json({ error: "Not found" }); return;
+  }
 
   // Refusals are specific so the console can tell the operator what to fix,
   // but each is still gated behind tenant scope above.
@@ -87,9 +91,11 @@ router.post("/v1/remote-desktop/sessions", requireTenantContext, requirePermissi
   }
   const capabilities = Array.isArray(device.capabilities) ? device.capabilities as string[] : [];
   if (!capabilities.includes("remote_desktop_v1")) {
+    await recordAudit({ action: "REMOTE_DESKTOP_REQUESTED", context, organizationId: device.organizationId, targetType: "device", targetId: device.id, result: "DENIED", req, metadata: { reason: "agent_incapable", authorization_mode: "DIRECT_SUPPORT" } });
     res.status(409).json({ error: "Agent does not support Remote Desktop", code: "agent_incapable" }); return;
   }
   if (device.status !== "ONLINE") {
+    await recordAudit({ action: "REMOTE_DESKTOP_REQUESTED", context, organizationId: device.organizationId, targetType: "device", targetId: device.id, result: "DENIED", req, metadata: { reason: "device_offline", authorization_mode: "DIRECT_SUPPORT" } });
     res.status(409).json({ error: "Device is offline", code: "device_offline" }); return;
   }
 
@@ -105,7 +111,7 @@ router.post("/v1/remote-desktop/sessions", requireTenantContext, requirePermissi
   await recordAudit({
     action: "REMOTE_DESKTOP_REQUESTED", context, organizationId: device.organizationId,
     targetType: "remote_desktop_session", targetId: created.session.id, req,
-    metadata: { device_id: device.id, privileged_action_id: created.session.privilegedActionId },
+    metadata: { device_id: device.id, privileged_action_id: created.session.privilegedActionId, authorization_mode: "DIRECT_SUPPORT" },
   });
   res.status(201).json({
     session: publicSession(created.session),
@@ -115,19 +121,19 @@ router.post("/v1/remote-desktop/sessions", requireTenantContext, requirePermissi
   });
 });
 
-router.get("/v1/remote-desktop/sessions/:id", requireTenantContext, requirePermission("privileged_actions.request"), async (req, res): Promise<void> => {
+router.get("/v1/remote-desktop/sessions/:id", requireTenantContext, requirePermission("remote_desktop.connect"), async (req, res): Promise<void> => {
   const id = uuid.safeParse(req.params.id);
   if (!id.success) { res.status(404).json({ error: "Not found" }); return; }
   const session = await getSession(id.data);
-  if (!session || !hasPermission(req.tenant!, "privileged_actions.request", session.organizationId)) { res.status(404).json({ error: "Not found" }); return; }
+  if (!session || !hasPermission(req.tenant!, "remote_desktop.connect", session.organizationId)) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ session: publicSession(session) });
 });
 
-router.post("/v1/remote-desktop/sessions/:id/terminate", requireTenantContext, requirePermission("privileged_actions.request"), async (req, res): Promise<void> => {
+router.post("/v1/remote-desktop/sessions/:id/terminate", requireTenantContext, requirePermission("remote_desktop.connect"), async (req, res): Promise<void> => {
   const id = uuid.safeParse(req.params.id);
   if (!id.success) { res.status(404).json({ error: "Not found" }); return; }
   const session = await getSession(id.data);
-  if (!session || !hasPermission(req.tenant!, "privileged_actions.request", session.organizationId)) { res.status(404).json({ error: "Not found" }); return; }
+  if (!session || !hasPermission(req.tenant!, "remote_desktop.connect", session.organizationId)) { res.status(404).json({ error: "Not found" }); return; }
   const closed = await closeSession(session.id, "CLOSED", "terminated_by_user");
   terminateBridge(session.id, "terminated_by_user");
   if (closed) {

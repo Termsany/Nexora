@@ -1,0 +1,74 @@
+# Nexora PRODUCTION overlay.
+#
+#   docker compose -f compose.yaml -f compose.prod.yaml ...
+#
+# Always go through scripts/env/nexora-compose.sh instead of invoking this
+# directly - the wrapper is what enforces human approval and release pinning.
+#
+# What this overlay changes relative to compose.yaml:
+#
+#   1. Project identity becomes `nexora-prod`, so production containers,
+#      network, and volumes cannot collide with a developer's stack.
+#   2. `build:` is removed from every service (`!reset null`). Production can
+#      only ever run a pre-built, reviewed, immutable image - a dirty worktree
+#      is not a deployable artifact, and with no build section Compose has no
+#      way to turn one into one.
+#   3. Images must be supplied explicitly and must already exist locally
+#      (`pull_policy: never`), so a typo'd tag fails loudly instead of
+#      silently pulling something unreviewed.
+#   4. Agent downloads are served from /srv/nexora/production/downloads, a
+#      root-owned host path outside every developer worktree - not from
+#      ./pilot/downloads, which any developer (or build script) can overwrite.
+#
+# NOTE ON THE CUTOVER: the currently running customer stack still uses the
+# legacy project name `nexora` and database `nexora`. Switching it to the
+# identities below is a data-moving operation (volume copy + database rename)
+# and is deliberately NOT performed by applying this file. Until that approved
+# cutover runs, the guards in scripts/env/ treat BOTH identities as production.
+
+name: nexora-prod
+
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?production POSTGRES_DB must come from /etc/nexora/env/production.env}
+      POSTGRES_USER: ${POSTGRES_USER:?production POSTGRES_USER must come from /etc/nexora/env/production.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?production POSTGRES_PASSWORD must come from /etc/nexora/env/production.env}
+
+  migrate:
+    build: !reset null
+    image: ${NEXORA_IMAGE_MIGRATE:?set NEXORA_IMAGE_MIGRATE to an approved immutable tag}
+    pull_policy: never
+
+  api:
+    build: !reset null
+    image: ${NEXORA_IMAGE_API:?set NEXORA_IMAGE_API to an approved immutable tag}
+    pull_policy: never
+    environment:
+      NEXORA_ENV: production
+      NEXORA_RELEASE: ${NEXORA_RELEASE:?set NEXORA_RELEASE to the approved release name}
+      # Remote command execution stays off in production until it is formally
+      # accepted. Hard-coded rather than defaulted so an edited env file
+      # cannot quietly turn it on.
+      REMOTE_COMMANDS_ENABLED: "false"
+
+  maintenance:
+    build: !reset null
+    image: ${NEXORA_IMAGE_API:?set NEXORA_IMAGE_API to an approved immutable tag}
+    pull_policy: never
+
+  notification-worker:
+    build: !reset null
+    image: ${NEXORA_IMAGE_API:?set NEXORA_IMAGE_API to an approved immutable tag}
+    pull_policy: never
+
+  web:
+    build: !reset null
+    image: ${NEXORA_IMAGE_WEB:?set NEXORA_IMAGE_WEB to an approved immutable tag}
+    pull_policy: never
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes: !override
+      - /etc/nexora/pki/server:/etc/nexora/pki/server:ro
+      - /srv/nexora/production/downloads:/usr/share/nginx/downloads:ro

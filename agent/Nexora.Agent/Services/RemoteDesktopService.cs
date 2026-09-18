@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Runtime.Versioning;
@@ -174,6 +175,10 @@ public sealed class RemoteDesktopService(
     {
         var buffer = new byte[4];
         uint sequence = 0;
+        var window = Stopwatch.GetTimestamp();
+        var frameCount = 0;
+        long frameBytes = 0;
+        double sendMilliseconds = 0;
         while (!session.IsCancellationRequested && socket.State == WebSocketState.Open)
         {
             var (control, frame) = await helper.ReadAsync(session.Token);
@@ -191,8 +196,18 @@ public sealed class RemoteDesktopService(
                 var payload = new byte[buffer.Length + frame.Length];
                 buffer.CopyTo(payload, 0);
                 frame.CopyTo(payload, buffer.Length);
+                var sending = Stopwatch.GetTimestamp();
                 try { await socket.SendAsync(payload, WebSocketMessageType.Binary, true, session.Token); }
                 catch (Exception) { return; }
+                sendMilliseconds += Stopwatch.GetElapsedTime(sending).TotalMilliseconds;
+                frameCount++;
+                frameBytes += payload.Length;
+                if (Stopwatch.GetElapsedTime(window).TotalSeconds >= 10)
+                {
+                    logger.LogInformation("RemoteDesktopTransport Frames={Frames} Bytes={Bytes} MeanSendMs={MeanSendMs}",
+                        frameCount, frameBytes, sendMilliseconds / frameCount);
+                    window = Stopwatch.GetTimestamp(); frameCount = 0; frameBytes = 0; sendMilliseconds = 0;
+                }
                 continue;
             }
             switch (control!.Type)
@@ -278,7 +293,7 @@ public sealed class RemoteDesktopService(
         var buffer = new byte[4];
         while (!token.IsCancellationRequested && socket.State == WebSocketState.Open)
         {
-            var started = DateTime.UtcNow;
+            var started = Stopwatch.GetTimestamp();
             var image = capture.Capture();
             if (image is null)
             {
@@ -296,13 +311,15 @@ public sealed class RemoteDesktopService(
             var payload = new byte[buffer.Length + image.Length];
             buffer.CopyTo(payload, 0);
             image.CopyTo(payload, buffer.Length);
+            var sending = Stopwatch.GetTimestamp();
             try { await socket.SendAsync(payload, WebSocketMessageType.Binary, true, token); }
             catch (Exception) { return; }
+            capture.Performance.Observe(capture.CaptureMs, capture.EncodeMs, Stopwatch.GetElapsedTime(sending).TotalMilliseconds, image.Length);
 
             // Never accumulate: if a capture+encode took longer than the budget
             // the next frame goes out immediately and the intervening ones are
             // simply never produced. Dropping beats queueing stale desktops.
-            var elapsed = DateTime.UtcNow - started;
+            var elapsed = Stopwatch.GetElapsedTime(started);
             if (elapsed < frameInterval) await Task.Delay(frameInterval - elapsed, token);
         }
     }

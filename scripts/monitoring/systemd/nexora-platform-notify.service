@@ -1,0 +1,32 @@
+[Unit]
+Description=Nexora independent platform incident notifier
+
+[Service]
+Type=oneshot
+User=nexora-notify
+Group=nexora-notify
+WorkingDirectory=/opt/nexora-monitor
+StateDirectory=nexora-notify
+LoadCredential=webhook:/etc/nexora-notify/credentials/webhook
+ExecStart=/bin/bash /opt/nexora-monitor/notify-local.sh
+TimeoutStartSec=20
+InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/etc/nexora -/etc/nexora-monitor
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=all
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @reboot @swap @raw-io @obsolete @privileged @resources
+StandardOutput=journal
+StandardError=journal
+UMask=0077
+

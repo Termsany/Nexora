@@ -5,12 +5,13 @@ import { and, eq, isNull } from "drizzle-orm";
 import { agentCredentialsTable, db, devicesTable } from "@workspace/db";
 import crypto from "node:crypto";
 import { logger } from "../lib/logger.ts";
+import { FrameForwarder } from "./frame-forwarder.ts";
 import { SESSION_COOKIE, resolveSession } from "../auth/sessions.ts";
 import { buildTenantContext } from "../tenancy/context.ts";
 import { hasPermission } from "../tenancy/policy.ts";
 import { recordAudit } from "../tenancy/audit.ts";
 import {
-  MAX_CONTROL_BYTES, MAX_FRAME_BYTES, MAX_INPUT_EVENTS_PER_SECOND, MAX_VIEWER_FRAME_QUEUE,
+  MAX_CONTROL_BYTES, MAX_FRAME_BYTES, MAX_INPUT_EVENTS_PER_SECOND,
   agentMessageSchema, decodeFrame, parseControl, toAgentInput, viewerMessageSchema,
   type ServerToAgent, type ServerToViewer,
 } from "./protocol.ts";
@@ -55,6 +56,8 @@ type Bridge = {
   framesForwarded: number;
   inputsForwarded: number;
   closing: boolean;
+  frameForwarder?: FrameForwarder;
+  performanceAt?: number;
 };
 
 const bridges = new Map<string, Bridge>();
@@ -76,6 +79,7 @@ function bridgeFor(sessionId: string): Bridge | undefined {
 async function teardown(bridge: Bridge, reason: string, status: "CLOSED" | "EXPIRED" | "FAILED" = "CLOSED"): Promise<void> {
   if (bridge.closing) return;
   bridge.closing = true;
+  bridge.frameForwarder?.close();
   bridges.delete(bridge.sessionId);
   send(bridge.viewer, { type: "session.closed", reason });
   send(bridge.agent, { type: "agent.stop", reason });
@@ -128,7 +132,7 @@ async function authorizeViewer(request: IncomingMessage, sessionId: string, toke
   if (!(["AUTHORIZED", "CONNECTING", "CONNECTED", "ACTIVE"] as string[]).includes(session.status)) return { error: "not_authorized" as const };
   // Tenant isolation: membership in the session's organization is required
   // even though the token already matched.
-  if (!hasPermission(context, "privileged_actions.request", session.organizationId)) return { error: "not_found" as const };
+  if (!hasPermission(context, "remote_desktop.connect", session.organizationId)) return { error: "not_found" as const };
   return { session, context, user };
 }
 
@@ -286,11 +290,16 @@ export function attachRemoteDesktopGateway(server: Server): { close: () => void 
         if (!frame) { void teardown(bridge, "invalid_frame", "FAILED"); return; }
         const viewer = bridge.viewer;
         if (!viewer || viewer.socket.readyState !== viewer.socket.OPEN) return; // nobody watching; drop
-        // Backpressure: if the viewer is behind, drop this frame rather than
-        // queue it. A stale desktop image has no value, and unbounded queueing
-        // is how a slow client turns into a server memory leak.
-        if (viewer.socket.bufferedAmount > MAX_VIEWER_FRAME_QUEUE * MAX_FRAME_BYTES) return;
-        try { viewer.socket.send(buffer, { binary: true }); bridge.framesForwarded += 1; } catch { /* viewer gone */ }
+        bridge.frameForwarder ??= new FrameForwarder(viewer.socket, () => { bridge.framesForwarded++; });
+        bridge.frameForwarder.offer(buffer);
+        const now = performance.now();
+        bridge.performanceAt ??= now;
+        if (now - bridge.performanceAt >= 10_000) {
+          logger.info({ sessionId: bridge.sessionId, framesSent: bridge.frameForwarder.sent,
+            framesDropped: bridge.frameForwarder.dropped, sendMs: Math.round(bridge.frameForwarder.sendMs),
+            bufferedBytes: viewer.socket.bufferedAmount }, "RemoteDesktopPerformance");
+          bridge.performanceAt = now;
+        }
         return;
       }
 

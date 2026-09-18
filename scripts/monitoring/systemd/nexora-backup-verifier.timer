@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify staging backup integrity every fifteen minutes
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=15min
+AccuracySec=10s
+Unit=nexora-backup-verifier.service
+
+[Install]
+WantedBy=timers.target

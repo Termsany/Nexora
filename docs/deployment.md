@@ -69,6 +69,25 @@ download at `/downloads/nexora-agent-pilot.zip` (built by
 the image, so a new Agent build can be published without rebuilding the
 web image).
 
+> [!IMPORTANT]
+> `pilot/downloads/` is **customer-visible content**, not a build output
+> directory — and it sits inside the developer worktree, writable by any
+> developer. Until PR-03 it was also the *default* output of
+> `scripts/build-windows-agent-package.sh`, under the customer-facing
+> filename `nexora-agent-pilot.zip`, so a developer testing an Agent build
+> silently replaced the package customers download.
+>
+> That script now refuses to run without an explicit `NEXORA_AGENT_OUT_DIR`.
+> Publish through `scripts/env/publish-agent-package.sh <environment>`, which
+> resolves a separate directory per environment and requires production
+> approval to write the production one. Production's target is
+> `/srv/nexora/production/downloads` — outside every worktree. See
+> `docs/environment-isolation.md`.
+>
+> `pilot/downloads/` currently also contains development/test artifacts
+> (`nexora-agent-task010b-full.zip`, `nexora-agent-0.3.0-44f52f5.zip`) that
+> were never meant to be customer-visible.
+
 **This is acceptable for the current internal Pilot only**, on the
 assumption that Nexora is reachable exclusively from the trusted internal
 network (no port-forwarding, no public exposure of `443`/`80`). The

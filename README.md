@@ -12,12 +12,30 @@ endpoints and displaying their health in an operational dashboard.
 - Portable .NET 8 Windows Worker Service agent skeleton
 - Structured API logging and backend-derived online/offline state
 
+> [!WARNING]
+> **Never run bare `docker compose` in this directory.** `compose.yaml`
+> declares `name: nexora`, which is the identity of the **running customer
+> production stack**. A plain `docker compose up`, `build`, `restart`, or
+> `down -v` here operates on real customer data — and `up` also runs the
+> `migrate` service, applying whatever migrations are currently in your
+> worktree to the customer database.
+>
+> Always select an environment explicitly:
+>
+> ```bash
+> scripts/env/nexora-compose.sh development up -d
+> ```
+>
+> See [docs/environment-isolation.md](docs/environment-isolation.md).
+
 ## Run locally
 
+Live-reload development, straight from source:
+
 ```bash
-cp .env.example .env
+cp .env.development.example .env.development && chmod 600 .env.development
 pnpm install
-pnpm --filter @workspace/db run push
+scripts/env/migrate.sh development        # never targets production
 pnpm --filter @workspace/api-server run dev
 pnpm --filter @workspace/nexora run dev
 ```
@@ -25,41 +43,44 @@ pnpm --filter @workspace/nexora run dev
 The dashboard is served through the configured preview. The API is mounted at
 `/api`; OpenAPI contracts live in `lib/api-spec/openapi.yaml`.
 
+`pnpm --filter @workspace/db run push` (destructive schema diffing, no
+migration history) is still available for fast local iteration, but go through
+`scripts/env/migrate.sh development push` — the wrapper refuses to run `push`
+against anything but a development database.
+
 ## Run with Docker Compose
 
-Build and launch the dashboard, API, and PostgreSQL database:
+Build and launch the dashboard, API, and PostgreSQL database as a
+production-like **local** stack (project `nexora-dev`, its own database,
+volume, network, and loopback-only ports):
 
 ```bash
-docker compose up --build
+scripts/env/nexora-compose.sh development up -d --build
 ```
 
-The `web` container terminates TLS and listens on `80` (HTTP → HTTPS
-redirect) and `443`. Open `https://nexora.design.local` (or
-`http://localhost` during local development without a certificate — see
-below). The database schema is applied automatically on startup via
-versioned Drizzle migrations (`lib/db/drizzle/*.sql`, run with
-`drizzle-kit migrate`) — deterministic, ordered, and safe to re-run since
-each migration is tracked in `drizzle.__drizzle_migrations`. `drizzle-kit
-push` remains available for fast local schema iteration only (see Quickstart
-above); it is never used by the `migrate` container or any deployment path.
-When you change `lib/db/src/schema`, run
+That starts PostgreSQL, the migrations, the API, and the workers on
+`127.0.0.1` only (API `3011`, PostgreSQL `55430`). The `web` container is
+opt-in — add `--profile web` — because it needs a local certificate in
+`.local/dev-pki`; it then serves on `8080`/`8443`, never `80`/`443`.
+
+The database schema is applied automatically on startup via versioned Drizzle
+migrations (`lib/db/drizzle/*.sql`, run with `drizzle-kit migrate`) —
+deterministic, ordered, and safe to re-run since each migration is tracked in
+`drizzle.__drizzle_migrations`. When you change `lib/db/src/schema`, run
 `pnpm --filter @workspace/db run generate` to add a new versioned migration
-file, commit it, then apply it locally with
-`pnpm --filter @workspace/db run migrate`. To use different host ports, set
-`NEXORA_HTTP_PORT` / `NEXORA_HTTPS_PORT`, for example:
+file, commit it, then apply it with `scripts/env/migrate.sh development`.
 
-```bash
-NEXORA_HTTP_PORT=8080 NEXORA_HTTPS_PORT=8443 docker compose up --build
-```
+In production the `web` container terminates TLS on `80` (HTTP → HTTPS
+redirect) and `443` at `https://nexora.design.local`. Its certificate and key
+are read from `/etc/nexora/pki/server/` on the host (bind-mounted read-only);
+see `docs/deployment.md` for how this is provisioned and backed up, and
+`docs/windows-internal-ca-trust.md` for how Windows clients trust the internal
+CA that issued it.
 
-TLS certificate and key are read from `/etc/nexora/pki/server/` on the host
-(bind-mounted read-only into `web`); see `docs/deployment.md` for how this
-is provisioned and backed up, and `docs/windows-internal-ca-trust.md` for
-how Windows clients trust the internal CA that issued it.
-
-For a non-local deployment, override `POSTGRES_PASSWORD`, `JWT_SECRET`,
-`ENROLLMENT_SECRET`, `ADMIN_API_TOKEN`, `API_BASE_URL`, and
-`CORS_ALLOWED_ORIGINS` with strong, deployment-specific values.
+Production and staging take every secret from `/etc/nexora/env/*.env` on their
+own hosts — never from a file in this repository. See
+`.env.production.example` / `.env.staging.example` for the required keys, and
+`docs/environment-isolation.md` for the environment model as a whole.
 
 ## Agent
 

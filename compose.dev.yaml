@@ -1,0 +1,106 @@
+# Nexora LOCAL DEVELOPMENT overlay.
+#
+#   scripts/env/nexora-compose.sh development up -d
+#
+# This is the overlay that makes `docker compose up` in a developer worktree
+# safe. Today, running plain `docker compose up` in this repo targets the
+# project `nexora` - which IS the running customer stack - and will rebuild
+# its images from the dirty worktree and run whatever migrations happen to be
+# in lib/db/drizzle. This overlay gives development a completely separate
+# identity so none of that can reach production.
+#
+# Everything here is disposable by design: `docker compose -p nexora-dev down
+# -v` must be a safe thing for any developer to type at any time.
+
+name: nexora-dev
+
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: nexora_dev
+      POSTGRES_USER: nexora_dev
+      # Disposable, non-secret, and deliberately hard-coded. A development
+      # database that shares a password with anything real is not isolated.
+      POSTGRES_PASSWORD: dev-disposable-not-a-secret
+    # Loopback only. Local tooling (drizzle-kit, psql) needs to reach it; the
+    # network does not. Never 0.0.0.0.
+    ports: !override
+      - "127.0.0.1:${NEXORA_DEV_PG_PORT:-55430}:5432"
+    # A dev database should die with its containers, not survive as a
+    # long-lived pet that slowly starts to matter.
+    restart: "no"
+
+  migrate:
+    environment:
+      DATABASE_URL: postgresql://nexora_dev:dev-disposable-not-a-secret@postgres:5432/nexora_dev
+
+  api:
+    environment:
+      # NODE_ENV stays "production" here, and that is deliberate.
+      #
+      # It describes how the Node bundle runs, not which environment this is -
+      # environment identity is NEXORA_ENV. Two concrete reasons:
+      #
+      #   1. src/lib/logger.ts attaches a pino-pretty transport whenever
+      #      NODE_ENV != production. That transport spawns a thread-stream
+      #      worker that is not part of the built dist bundle, so the image
+      #      crashes on boot with MODULE_NOT_FOUND. (Observed, not theorised.)
+      #   2. src/security/config.ts returns early unless NODE_ENV=production,
+      #      so a "development" NODE_ENV would silently skip the secret
+      #      validation this stack exists to exercise.
+      #
+      # Live-reload development is `pnpm dev` from source (see README), where
+      # pino-pretty resolves normally. This stack is the production-like local
+      # stack: same bundle as production, pointed at disposable dev data.
+      NEXORA_ENV: development
+      DATABASE_URL: postgresql://nexora_dev:dev-disposable-not-a-secret@postgres:5432/nexora_dev
+      API_BASE_URL: http://localhost:${NEXORA_DEV_HTTP_PORT:-8080}/api
+      CORS_ALLOWED_ORIGINS: http://localhost:${NEXORA_DEV_HTTP_PORT:-8080}
+      # Test-only values. These are not secrets and must never be reused
+      # anywhere else - see docs/environment-isolation.md.
+      JWT_SECRET: dev-only-jwt-secret-not-for-any-real-environment
+      ENROLLMENT_SECRET: dev-only-enrollment-secret-not-for-any-real-environment
+      ADMIN_API_TOKEN: dev-only-admin-token-not-for-any-real-environment
+      REMOTE_COMMANDS_ENABLED: ${REMOTE_COMMANDS_ENABLED:-false}
+      # No outbound notifications from a developer machine, ever.
+      TELEGRAM_ENABLED: "false"
+      EMAIL_ENABLED: "false"
+      WEBHOOK_ENABLED: "false"
+    ports: !override
+      - "127.0.0.1:${NEXORA_DEV_API_PORT:-3011}:3001"
+    restart: "no"
+
+  maintenance:
+    environment:
+      NEXORA_ENV: development
+      DATABASE_URL: postgresql://nexora_dev:dev-disposable-not-a-secret@postgres:5432/nexora_dev
+      TELEGRAM_ENABLED: "false"
+      EMAIL_ENABLED: "false"
+      WEBHOOK_ENABLED: "false"
+    restart: "no"
+
+  notification-worker:
+    environment:
+      NEXORA_ENV: development
+      DATABASE_URL: postgresql://nexora_dev:dev-disposable-not-a-secret@postgres:5432/nexora_dev
+      TELEGRAM_ENABLED: "false"
+      EMAIL_ENABLED: "false"
+      WEBHOOK_ENABLED: "false"
+    restart: "no"
+
+  web:
+    # Opt-in only: `--profile web`. The default dev stack is API + database,
+    # which is what the README quickstart actually uses. Keeping `web` out of
+    # the default set means a developer does not need to provision a local
+    # certificate just to run the API, and cannot accidentally bind 80/443.
+    profiles: ["web"]
+    ports: !override
+      - "127.0.0.1:${NEXORA_DEV_HTTP_PORT:-8080}:80"
+      - "127.0.0.1:${NEXORA_DEV_HTTPS_PORT:-8443}:443"
+    # Both production bind mounts are replaced. The production PKI directory
+    # (/etc/nexora/pki/server) and the production downloads directory
+    # (./pilot/downloads) are never mounted into a development container.
+    volumes: !override
+      - ./.local/dev-pki:/etc/nexora/pki/server:ro
+      - ./.local/dev-downloads:/usr/share/nginx/downloads:ro
+    restart: "no"

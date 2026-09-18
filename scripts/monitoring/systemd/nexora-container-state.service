@@ -1,0 +1,33 @@
+[Unit]
+Description=Nexora root-owned fixed Docker projection publisher
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/nexora-monitor
+EnvironmentFile=/etc/nexora-monitor/publisher.conf
+RuntimeDirectory=nexora-monitor
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ExecStart=/bin/bash /opt/nexora-monitor/publish-container-state.sh
+TimeoutStartSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=all
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @reboot @swap @raw-io @obsolete @privileged @resources
+StandardOutput=journal
+StandardError=journal
+UMask=0077
+

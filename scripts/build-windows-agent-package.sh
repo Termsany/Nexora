@@ -16,7 +16,19 @@ UNINSTALL_PS1_SRC="$REPO_ROOT/scripts/windows/uninstall-agent.ps1"
 ROOT_CA_SRC="$REPO_ROOT/pilot/certificates/nexora-root-ca.crt"
 AGENT_CSPROJ="$REPO_ROOT/agent/Nexora.Agent/Nexora.Agent.csproj"
 
-OUT_DIR="$REPO_ROOT/pilot/downloads"
+# The output directory must be chosen explicitly by the caller, because the
+# old default ($REPO_ROOT/pilot/downloads) is bind-mounted into the running
+# customer web container - writing there is a production publish, not a build.
+# scripts/env/publish-agent-package.sh resolves this per environment and is
+# the only thing that may point it at a customer-visible path.
+if [ -z "${NEXORA_AGENT_OUT_DIR:-}" ]; then
+  echo "REFUSED: NEXORA_AGENT_OUT_DIR is not set." >&2
+  echo "       This script no longer defaults to pilot/downloads, which is served to" >&2
+  echo "       customers by the running web container. Publish through:" >&2
+  echo "         scripts/env/publish-agent-package.sh <development|staging|production>" >&2
+  exit 2
+fi
+OUT_DIR="$NEXORA_AGENT_OUT_DIR"
 ZIP_NAME="nexora-agent-pilot.zip"
 ZIP_PATH="$OUT_DIR/$ZIP_NAME"
 SHA_PATH="$ZIP_PATH.sha256"

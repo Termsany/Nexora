@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.Versioning;
 using System.Text.Json;
@@ -132,7 +133,7 @@ public static class HelperHost
         var failures = 0;
         while (!token.IsCancellationRequested && pipe.IsConnected)
         {
-            var started = DateTime.UtcNow;
+            var started = Stopwatch.GetTimestamp();
             var image = capture.Capture();
             if (image is null)
             {
@@ -147,8 +148,10 @@ public static class HelperHost
                 continue;
             }
             failures = 0;
+            var sending = Stopwatch.GetTimestamp();
             if (!await SendFrameAsync(pipe, image, token)) return;
-            var elapsed = DateTime.UtcNow - started;
+            capture.Performance.Observe(capture.CaptureMs, capture.EncodeMs, Stopwatch.GetElapsedTime(sending).TotalMilliseconds, image.Length);
+            var elapsed = Stopwatch.GetElapsedTime(started);
             if (elapsed < interval) await Task.Delay(interval - elapsed, token);
         }
     }

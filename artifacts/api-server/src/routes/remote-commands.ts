@@ -9,11 +9,11 @@ import { hasPermission, organizationScope } from "../tenancy/policy.ts";
 import { findDeviceInScope } from "../tenancy/scope.ts";
 import { recordAudit } from "../tenancy/audit.ts";
 import { canManageRemoteCommandsGate, remoteCommandsEnabled, setRemoteCommandsEnabled } from "../security/remote-command-gate.ts";
+import { commandSchema } from "../security/remote-command-validation.ts";
 
 const router: IRouter = Router();
 const uuid = z.string().uuid();
 const enabled = remoteCommandsEnabled;
-const commandSchema = z.object({ device_id: uuid, shell: z.enum(["CMD", "POWERSHELL"]), command: z.string().trim().min(1).max(64 * 1024), timeout_seconds: z.coerce.number().int().min(1).max(900).default(60), reason: z.string().trim().min(1).max(1000), working_directory: z.string().max(260).optional() });
 
 router.get("/v1/remote-commands/gate", requireTenantContext, async (req, res): Promise<void> => {
   const context = req.tenant!;

@@ -22,7 +22,10 @@ url="postgresql://${user}:${pass}@127.0.0.1:${port}/${db}"
 cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-docker run -d --name "$name" -e POSTGRES_DB="$db" -e POSTGRES_USER="$user" -e POSTGRES_PASSWORD="$pass" -p "${port}:5432" postgres:16-alpine >/dev/null
+docker run -d --name "$name" \
+  --label nexora.environment=development --label nexora.disposable=true \
+  -e POSTGRES_DB="$db" -e POSTGRES_USER="$user" -e POSTGRES_PASSWORD="$pass" \
+  -p "127.0.0.1:${port}:5432" postgres:16-alpine >/dev/null
 for _ in $(seq 1 60); do
   if docker exec "$name" pg_isready -U "$user" -d "$db" >/dev/null 2>&1; then break; fi
   sleep 1

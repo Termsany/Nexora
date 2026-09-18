@@ -6,6 +6,7 @@ import { AppShell, PageIntro } from '@/components/app-shell';
 import { InlineNotice, Panel, PanelHeading } from '@/components/console-ui';
 import { apiRequest } from '@/lib/api';
 import { useCapability } from '@/lib/session';
+import { LatestFrameQueue } from '@/lib/latest-frame';
 
 /**
  * Nexora Remote Console.
@@ -30,18 +31,18 @@ type RemoteState = {
 type SessionView = { id: string; status: string; expires_at: string; screen_width: number | null; screen_height: number | null };
 type CreateResponse = { session: SessionView; privileged_action_id: string; viewer_token: string };
 
-type Phase = 'idle' | 'requesting' | 'awaiting_approval' | 'connecting' | 'live' | 'closed' | 'error';
+type Phase = 'idle' | 'requesting' | 'connecting' | 'live' | 'closed' | 'error';
 
 const PHASE_LABEL: Record<Phase, string> = {
-  idle: 'Not connected', requesting: 'Requesting session', awaiting_approval: 'Waiting for approval',
+  idle: 'Not connected', requesting: 'Requesting session',
   connecting: 'Connecting', live: 'Connected', closed: 'Disconnected', error: 'Error',
 };
 
 export default function RemoteConsole() {
   const { deviceId } = useParams<{ deviceId: string }>();
-  const canRequest = useCapability('privileged_actions.request');
 
   const deviceQuery = useQuery({ queryKey: ['device', deviceId], queryFn: () => apiRequest<DeviceDetails>(`/v1/devices/${deviceId}`), retry: false });
+  const canRequest = useCapability('remote_desktop.connect', deviceQuery.data?.organization_id);
   const remoteQuery = useQuery({
     queryKey: ['device-remote-desktop', deviceId],
     queryFn: () => apiRequest<RemoteState>(`/v1/devices/${deviceId}/remote-desktop`),
@@ -54,6 +55,8 @@ export default function RemoteConsole() {
   const [screen, setScreen] = useState<{ width: number; height: number } | null>(null);
   const [fit, setFit] = useState(true);
   const [elapsed, setElapsed] = useState(0);
+  const [performanceStats, setPerformanceStats] = useState({ fps: 0, decodeMs: 0, dropped: 0 });
+  const frameQueueRef = useRef<LatestFrameQueue<ArrayBuffer> | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -75,25 +78,27 @@ export default function RemoteConsole() {
   }, [remote, canRequest]);
 
   // ------------------------------------------------------------ frame paint
-  const paint = useCallback(async (payload: ArrayBuffer) => {
+  const paint = useCallback(async (payload: ArrayBuffer, isCurrent: () => boolean) => {
     const canvas = canvasRef.current;
     if (!canvas || payload.byteLength <= 4) return;
     // 4-byte big-endian sequence header, then the encoded image.
     const image = payload.slice(4);
+    const bitmap = await createImageBitmap(new Blob([image], { type: 'image/jpeg' }));
     try {
-      const bitmap = await createImageBitmap(new Blob([image], { type: 'image/jpeg' }));
+      if (!isCurrent()) return;
       if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
         canvas.width = bitmap.width; canvas.height = bitmap.height;
       }
       canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
-      bitmap.close();
-    } catch { /* a corrupt frame is dropped; the next one repaints */ }
+    } finally { bitmap.close(); }
   }, []);
 
   // --------------------------------------------------------------- teardown
   const disconnect = useCallback((reason?: string) => {
     const socket = socketRef.current;
     socketRef.current = null;
+    frameQueueRef.current?.dispose();
+    frameQueueRef.current = null;
     if (socket && socket.readyState === WebSocket.OPEN) {
       try { socket.send(JSON.stringify({ type: 'session.close' })); } catch { /* closing anyway */ }
     }
@@ -103,27 +108,50 @@ export default function RemoteConsole() {
     if (reason) setNotice(reason);
   }, []);
 
-  useEffect(() => () => { try { socketRef.current?.close(); } catch { /* unmount */ } }, []);
+  useEffect(() => () => {
+    frameQueueRef.current?.dispose();
+    const socket = socketRef.current;
+    socketRef.current = null;
+    try { socket?.close(); } catch { /* unmount */ }
+  }, []);
 
   // Session timer, purely cosmetic but it makes an open session visible.
   useEffect(() => {
     if (phase !== 'live') return;
     const started = Date.now();
-    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    let last = performance.now();
+    let rendered = frameQueueRef.current?.rendered ?? 0;
+    const timer = window.setInterval(() => {
+      setElapsed(Math.floor((Date.now() - started) / 1000));
+      const queue = frameQueueRef.current;
+      const now = performance.now();
+      if (queue) {
+        setPerformanceStats({ fps: Math.round((queue.rendered - rendered) * 1000 / (now - last)),
+          decodeMs: Math.round(queue.decodeMs), dropped: queue.dropped });
+        rendered = queue.rendered;
+      }
+      last = now;
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [phase]);
 
   // ------------------------------------------------------------ open socket
   const openSocket = useCallback((sessionId: string, token: string) => {
+    frameQueueRef.current?.dispose();
+    try { socketRef.current?.close(); } catch { /* old connection */ }
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const socket = new WebSocket(`${scheme}://${window.location.host}/api/v1/remote-desktop/sessions/${sessionId}/viewer?token=${encodeURIComponent(token)}`);
     socket.binaryType = 'arraybuffer';
     socketRef.current = socket;
+    const frames = new LatestFrameQueue<ArrayBuffer>(payload => paint(payload, () => socketRef.current === socket && socket.readyState === WebSocket.OPEN));
+    frameQueueRef.current = frames;
+    setPerformanceStats({ fps: 0, decodeMs: 0, dropped: 0 });
     setPhase('connecting');
 
     socket.onopen = () => socket.send(JSON.stringify({ type: 'session.hello', protocol: 'nexora-remote-desktop-v1' }));
     socket.onmessage = (event) => {
-      if (event.data instanceof ArrayBuffer) { void paint(event.data); setPhase('live'); return; }
+      if (socketRef.current !== socket) return;
+      if (event.data instanceof ArrayBuffer) { frames.offer(event.data); setPhase('live'); return; }
       let message: { type: string; [key: string]: unknown };
       try { message = JSON.parse(String(event.data)); } catch { return; }
       switch (message.type) {
@@ -132,13 +160,18 @@ export default function RemoteConsole() {
         case 'session.status': if (message.state === 'ACTIVE') setPhase('live'); break;
         case 'session.error': setNotice(`Session error: ${String(message.code).replaceAll('_', ' ')}`); break;
         case 'session.rejected': setNotice(`Rejected: ${String(message.reason).replaceAll('_', ' ')}`); setPhase('error'); break;
-        case 'session.closed': setNotice(`Session closed: ${String(message.reason).replaceAll('_', ' ')}`); setPhase('closed'); break;
+        case 'session.closed': disconnect(`Session closed: ${String(message.reason).replaceAll('_', ' ')}`); break;
         default: break;
       }
     };
-    socket.onerror = () => { setNotice('Connection error.'); setPhase('error'); };
-    socket.onclose = () => { socketRef.current = null; setPhase((current) => (current === 'live' || current === 'connecting' ? 'closed' : current)); };
-  }, [paint]);
+    socket.onerror = () => { if (socketRef.current === socket) { setNotice('Connection error.'); setPhase('error'); } };
+    socket.onclose = () => {
+      frames.dispose();
+      if (socketRef.current !== socket) return;
+      socketRef.current = null;
+      setPhase((current) => (current === 'live' || current === 'connecting' ? 'closed' : current));
+    };
+  }, [paint, disconnect]);
 
   // --------------------------------------------------------------- start it
   const start = useCallback(async () => {
@@ -150,34 +183,12 @@ export default function RemoteConsole() {
         body: JSON.stringify({ device_id: deviceId, reason: 'Remote support session' }),
       });
       setSession({ id: created.session.id, token: created.viewer_token, expiresAt: created.session.expires_at });
-      setPhase('awaiting_approval');
-      setNotice(`Awaiting approval · Privileged Action ${created.privileged_action_id}`);
+      openSocket(created.session.id, created.viewer_token);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not request a session.');
       setPhase('error');
     }
-  }, [deviceId]);
-
-  // Poll until the approver promotes the session, then connect once.
-  useEffect(() => {
-    if (phase !== 'awaiting_approval' || !session) return;
-    let cancelled = false;
-    const poll = window.setInterval(async () => {
-      try {
-        const { session: current } = await apiRequest<{ session: SessionView }>(`/v1/remote-desktop/sessions/${session.id}`);
-        if (cancelled) return;
-        if (['AUTHORIZED', 'CONNECTING', 'CONNECTED', 'ACTIVE'].includes(current.status)) {
-          window.clearInterval(poll);
-          openSocket(session.id, session.token);
-        } else if (['CLOSED', 'EXPIRED', 'FAILED'].includes(current.status)) {
-          window.clearInterval(poll);
-          setPhase('closed');
-          setNotice(`Session ${current.status.toLowerCase()}.`);
-        }
-      } catch { /* transient; the next tick retries */ }
-    }, 3000);
-    return () => { cancelled = true; window.clearInterval(poll); };
-  }, [phase, session, openSocket]);
+  }, [deviceId, openSocket]);
 
   const terminate = useCallback(async () => {
     disconnect();
@@ -262,13 +273,13 @@ export default function RemoteConsole() {
         title={header}
         description="Live desktop control, mediated and audited by Nexora. Nothing is exposed on the endpoint."
         action={
-          <div className="flex items-center gap-2">
-            <span className="rounded-md border border-border bg-card px-3 py-2 text-[10px] font-semibold text-muted-foreground" data-testid="text-remote-phase">
-              {PHASE_LABEL[phase]}{live ? ` · ${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : ''}
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="max-w-full rounded-md border border-border bg-card px-3 py-2 text-[10px] font-semibold text-muted-foreground" data-testid="text-remote-phase">
+              {PHASE_LABEL[phase]}{live ? ` · ${Math.floor(elapsed / 60)}m ${elapsed % 60}s · ${performanceStats.fps} FPS · decode ${performanceStats.decodeMs} ms · dropped ${performanceStats.dropped}` : ''}
             </span>
             {live && <button type="button" onClick={() => setFit((value) => !value)} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-[10px] font-semibold" data-testid="button-remote-scale"><ScanLine size={14} />{fit ? 'Fit' : '1:1'}</button>}
             {live && <button type="button" onClick={fullscreen} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-[10px] font-semibold" data-testid="button-remote-fullscreen"><Maximize2 size={14} />Fullscreen</button>}
-            {(live || phase === 'connecting' || phase === 'awaiting_approval') && <button type="button" onClick={() => void terminate()} className="inline-flex items-center gap-2 rounded-md bg-destructive px-3 py-2 text-[10px] font-semibold text-destructive-foreground" data-testid="button-remote-disconnect"><PowerOff size={14} />Disconnect</button>}
+            {(live || phase === 'connecting') && <button type="button" onClick={() => void terminate()} className="inline-flex items-center gap-2 rounded-md bg-destructive px-3 py-2 text-[10px] font-semibold text-destructive-foreground" data-testid="button-remote-disconnect"><PowerOff size={14} />Disconnect</button>}
           </div>
         }
       />
@@ -320,9 +331,7 @@ export default function RemoteConsole() {
               <p className="mt-3 text-[12px] font-semibold text-white">{PHASE_LABEL[phase]}</p>
               {blocked
                 ? <p className="mt-2 text-[11px] text-muted-foreground" data-testid="text-remote-blocked">{blocked}</p>
-                : phase === 'awaiting_approval'
-                  ? <p className="mt-2 text-[11px] text-muted-foreground">A different authorized person must approve this session. <Link href="/security/approvals" className="underline">Open approvals</Link></p>
-                  : <p className="mt-2 text-[11px] text-muted-foreground">Start a session to control this endpoint.</p>}
+                : <p className="mt-2 text-[11px] text-muted-foreground">Start a session to control this endpoint.</p>}
               {!blocked && (phase === 'idle' || phase === 'closed' || phase === 'error') && (
                 <button type="button" onClick={() => void start()} className="mt-4 rounded-md bg-primary px-4 py-2 text-[11px] font-semibold text-primary-foreground" data-testid="button-remote-start">
                   Start remote session

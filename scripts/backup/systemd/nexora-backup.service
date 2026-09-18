@@ -1,0 +1,81 @@
+# Nexora PostgreSQL backup - systemd service template.
+#
+# NOT INSTALLED OR ENABLED. Reviewed template for the maintenance window that
+# turns on automated production backups.
+#
+# Canonical production backup root: /var/backups/nexora
+#   Chosen so ProtectHome=true can stay enabled on both this unit and the
+#   monitoring backup verifier. The legacy location
+#   /home/mustafa/.nexora-backups/production is MIGRATION_SOURCE_ONLY - see
+#   docs/backup-production-migration.md.
+#
+# Before enabling: create /etc/nexora/backup/backup.env (root:root 0600, never
+# in git) with the connection parameters, the password-file path and the GPG
+# recipient. postgres-backup.sh additionally requires its own two typed
+# approval phrases for a production target, so this unit cannot silently begin
+# backing up production without a deliberate operator action.
+
+[Unit]
+Description=Nexora PostgreSQL backup
+Documentation=file:///opt/nexora/docs/backup-restore.md
+After=network-online.target docker.service
+Wants=network-online.target
+ConditionPathExists=/etc/nexora/backup/backup.env
+OnFailure=nexora-platform-notify.service
+
+[Service]
+Type=oneshot
+# systemd serializes a oneshot unit against re-entrant starts, so a slow
+# backup cannot overlap the next timer firing.
+TimeoutStartSec=1800
+EnvironmentFile=/etc/nexora/backup/backup.env
+WorkingDirectory=/opt/nexora
+ExecStart=/opt/nexora/scripts/backup/postgres-backup.sh production \
+  --pg-host ${NEXORA_BACKUP_PG_HOST} \
+  --pg-port ${NEXORA_BACKUP_PG_PORT} \
+  --pg-db ${NEXORA_BACKUP_PG_DB} \
+  --pg-user ${NEXORA_BACKUP_PG_USER} \
+  --pg-password-file ${NEXORA_BACKUP_PG_PASSWORD_FILE} \
+  --backup-root /var/backups/nexora \
+  --gpg-recipient ${NEXORA_BACKUP_GPG_RECIPIENT}
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexora-backup
+
+# --- Hardening -------------------------------------------------------------
+# This job legitimately needs more filesystem reach than nexora-monitor: it
+# writes real backup artifacts and reads the GPG recipient. It still runs with
+# no capabilities and a strict, explicitly enumerated write surface. The
+# unprivileged monitor never gains any of this - it only ever reads the
+# sanitized /run/nexora-monitor/backup-state.json projection.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+# The backup root is the ONLY writable path. Deliberately literal: systemd
+# resolves ReadWritePaths at parse time and will not expand EnvironmentFile
+# variables here.
+ReadWritePaths=/var/backups/nexora
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectProc=invisible
+ProcSubset=all
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Needs the Docker socket to reach the production Postgres container, plus
+# outbound TCP if the connection is ever made over the network.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @reboot @swap @raw-io @obsolete @privileged @resources
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,35 @@
+[Unit]
+Description=Nexora staging privileged backup metadata verifier
+OnFailure=nexora-platform-notify.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/nexora-monitor
+RuntimeDirectory=nexora-monitor
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/python3 -B /opt/nexora-monitor/verify-backup.py
+TimeoutStartSec=300
+MemoryMax=256M
+PrivateNetwork=true
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProcSubset=all
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @reboot @swap @raw-io @obsolete @privileged @resources
+InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/etc/nexora/pki -/etc/nexora-monitor/credentials -/etc/nexora-notify
+StandardOutput=journal
+StandardError=journal
+UMask=0077

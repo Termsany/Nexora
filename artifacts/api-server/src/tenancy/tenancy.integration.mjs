@@ -502,6 +502,40 @@ test("an agent cannot choose its own organization or site at enrollment", async 
   assert.equal(seenByA.body.total, 1);
 });
 
+test("enrollment token lifecycle: exhausted, revoked, expired and malformed tokens are all refused", async () => {
+  const mk = (over = {}) => call("POST", "/api/v1/admin/enrollment-tokens", {
+    who: "a",
+    body: { name: "lifecycle", organization_id: ids.orgA, site_id: ids.siteA, expires_at: new Date(Date.now() + 3600_000).toISOString(), max_uses: 1, ...over },
+  });
+  const enroll = (token) => {
+    const deviceUuid = crypto.randomUUID();
+    return call("POST", "/api/v1/agents/enroll", {
+      body: { enrollment_token: token, device_uuid: deviceUuid, hostname: "LIFECYCLE-PC", agent_version: "0.3.0", machine_guid_hash: crypto.createHash("sha256").update(deviceUuid).digest("hex") },
+    });
+  };
+
+  // Exhaustion: a max_uses=1 token works exactly once.
+  const single = await mk();
+  assert.equal(single.status, 201);
+  assert.equal((await enroll(single.body.token)).status, 201);
+  assert.equal((await enroll(single.body.token)).status, 401, "second use of a single-use token is refused");
+
+  // Revocation takes effect immediately.
+  const revocable = await mk({ max_uses: 5 });
+  assert.equal((await call("POST", `/api/v1/admin/enrollment-tokens/${revocable.body.id}/revoke`, { who: "a" })).status, 204);
+  assert.equal((await enroll(revocable.body.token)).status, 401, "a revoked token is refused");
+
+  // Expiry: the create endpoint refuses a past timestamp, so mint a very
+  // short-lived token and let it lapse.
+  const shortLived = await mk({ expires_at: new Date(Date.now() + 1500).toISOString(), max_uses: 5 });
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  assert.equal((await enroll(shortLived.body.token)).status, 401, "an expired token is refused");
+
+  // Malformed / unknown token values never match a stored hash.
+  assert.equal((await enroll("nxen_this-token-was-never-issued")).status, 401);
+  assert.equal((await enroll("not-even-the-right-shape")).status, 401);
+});
+
 test("an enrolled agent's own credential still drives telemetry, and its tenant follows the device", async () => {
   const created = await call("POST", "/api/v1/admin/enrollment-tokens", {
     who: "a",

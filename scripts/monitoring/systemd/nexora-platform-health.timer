@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Nexora platform self-monitoring every 2 minutes
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=120s
+AccuracySec=15s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

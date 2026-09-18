@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh sanitized container metadata
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=30s
+AccuracySec=1s
+Unit=nexora-container-state.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,55 @@
+# Weekly disposable restore verification. NOT INSTALLED OR ENABLED.
+#
+# A backup is not proven by pg_dump exiting 0. This restores the newest
+# artifact into a THROWAWAY PostgreSQL container, runs structural checks, then
+# destroys it, and records the outcome so the monitoring BACKUP domain can
+# surface a stale restore verification.
+#
+# It never connects to, reads from, or writes to the production database.
+#
+# Weekly rather than daily: a full decrypt+restore costs minutes of CPU and
+# transient disk, which is disproportionate nightly for a ~115MB database, and
+# a 7-day worst-case detection window for silent corruption is acceptable when
+# every backup already gets a checksum + OpenPGP structure check every 15
+# minutes. Raise the frequency if the database grows materially.
+
+[Unit]
+Description=Nexora weekly disposable restore verification
+Documentation=file:///opt/nexora/docs/backup-restore.md
+After=network-online.target docker.service
+Wants=network-online.target
+ConditionPathExists=/etc/nexora/backup/backup.env
+OnFailure=nexora-platform-notify.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=3600
+EnvironmentFile=/etc/nexora/backup/backup.env
+WorkingDirectory=/opt/nexora
+ExecStart=/opt/nexora/scripts/backup/postgres-restore.sh disposable \
+  --input ${NEXORA_BACKUP_LATEST} \
+  --gpg-home ${NEXORA_BACKUP_GPG_HOME}
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexora-restore-check
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/nexora /var/lib/nexora-restore-check
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @reboot @swap @raw-io @obsolete @privileged
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

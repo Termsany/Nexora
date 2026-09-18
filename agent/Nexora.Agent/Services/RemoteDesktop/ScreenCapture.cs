@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -20,8 +21,8 @@ namespace Nexora.Agent.Services.RemoteDesktop;
 [SupportedOSPlatform("windows")]
 public sealed class ScreenCapture : IDisposable
 {
-    private readonly int _maxWidth;
-    private readonly long _quality;
+    private int _maxWidth;
+    private long _quality;
     private Bitmap? _surface;
     private Bitmap? _scaled;
     private readonly ImageCodecInfo _jpeg;
@@ -30,6 +31,18 @@ public sealed class ScreenCapture : IDisposable
     public int Width { get; private set; }
     public int Height { get; private set; }
     public int Displays { get; private set; } = 1;
+    public double CaptureMs { get; private set; }
+    public double EncodeMs { get; private set; }
+    public CapturePerformance Performance { get; }
+
+    public void ApplyPerformance()
+    {
+        _maxWidth = Performance.Width;
+        if (_quality == Performance.Quality) return;
+        _quality = Performance.Quality;
+        _encoderParameters.Param[0].Dispose();
+        _encoderParameters.Param[0] = new EncoderParameter(Encoder.Quality, _quality);
+    }
 
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
     private const int SM_CXSCREEN = 0, SM_CYSCREEN = 1, SM_CMONITORS = 80;
@@ -38,6 +51,7 @@ public sealed class ScreenCapture : IDisposable
     {
         _maxWidth = Math.Clamp(maxWidth, 320, 3840);
         _quality = Math.Clamp(quality, 20, 95);
+        Performance = new CapturePerformance(_maxWidth, (int)_quality);
         _jpeg = ImageCodecInfo.GetImageEncoders().First(codec => codec.FormatID == ImageFormat.Jpeg.Guid);
         _encoderParameters = new EncoderParameters(1);
         _encoderParameters.Param[0] = new EncoderParameter(Encoder.Quality, _quality);
@@ -57,6 +71,8 @@ public sealed class ScreenCapture : IDisposable
     /// </summary>
     public byte[]? Capture()
     {
+        ApplyPerformance();
+        var started = Stopwatch.GetTimestamp();
         // Resolution can change mid-session (display swap, RDP resize).
         var previousWidth = Width;
         var previousHeight = Height;
@@ -87,7 +103,10 @@ public sealed class ScreenCapture : IDisposable
             }
 
             using var buffer = new MemoryStream(capacity: 128 * 1024);
+            CaptureMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            var encoding = Stopwatch.GetTimestamp();
             source.Save(buffer, _jpeg, _encoderParameters);
+            EncodeMs = Stopwatch.GetElapsedTime(encoding).TotalMilliseconds;
             return buffer.ToArray();
         }
         catch (Exception)

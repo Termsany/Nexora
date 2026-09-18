@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
-import { db, devicesTable, privilegedActionsTable, remoteDesktopSessionsTable } from "@workspace/db";
+import { auditLogTable, db, devicesTable, privilegedActionsTable, remoteDesktopSessionsTable } from "@workspace/db";
 
 /**
  * Remote Desktop session lifecycle.
@@ -71,7 +71,11 @@ export async function createSession(input: {
         requestedBy: input.userId,
         expiresAt,
         requestReason: input.reason,
-        safeParameters: { capability: "remote_desktop_v1" },
+        safeParameters: { capability: "remote_desktop_v1", authorization_mode: "DIRECT_SUPPORT" },
+        status: "APPROVED",
+        requiresTwoPerson: false,
+        approvedBy: input.userId,
+        approvedAt: new Date(),
       }).returning();
       const [session] = await tx.insert(remoteDesktopSessionsTable).values({
         organizationId: input.organizationId,
@@ -79,9 +83,19 @@ export async function createSession(input: {
         deviceId: input.deviceId,
         privilegedActionId: action!.id,
         requestedByUserId: input.userId,
+        status: "AUTHORIZED",
+        authorizedAt: new Date(),
+        approvedByUserId: input.userId,
         viewerTokenHash: viewer.hash,
         expiresAt,
       }).returning();
+      await tx.insert(auditLogTable).values({
+        action: "REMOTE_DESKTOP_AUTHORIZED", actorUserId: input.userId,
+        actorType: "USER", organizationId: input.organizationId,
+        targetType: "remote_desktop_session", targetId: session!.id,
+        subjectId: session!.id, result: "SUCCESS",
+        metadata: { device_id: input.deviceId, privileged_action_id: action!.id, authorization_mode: "DIRECT_SUPPORT" },
+      });
       return { session: session!, viewerToken: viewer.raw };
     });
   } catch (error) {

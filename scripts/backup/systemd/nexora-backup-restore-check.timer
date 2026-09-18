@@ -1,0 +1,13 @@
+# Weekly restore verification. NOT INSTALLED OR ENABLED.
+[Unit]
+Description=Weekly Nexora disposable restore verification
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=900
+AccuracySec=5min
+Unit=nexora-backup-restore-check.service
+
+[Install]
+WantedBy=timers.target

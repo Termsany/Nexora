@@ -47,8 +47,18 @@ Thumbs.db
 # Replit
 .cache/
 .local/
-.env
 node_modules/
+
+# Environment secrets. Only the *.example templates are ever tracked; every
+# real environment file (including the legacy root .env) stays local, and
+# production/staging secrets live on their hosts at /etc/nexora/env/, outside
+# any worktree. See docs/environment-isolation.md.
+.env
+.env.*
+!.env.example
+!.env.development.example
+!.env.staging.example
+!.env.production.example
 
 # Deployment-time build/publish artifacts (not source) - keep pilot/certificates/ tracked
 /publish/
@@ -58,6 +68,15 @@ node_modules/
 # regenerated on demand, not committed (67+ MB binary; see docs/deployment.md)
 /pilot/downloads/
 
+# Database dumps contain customer data and must never enter git.
+# NOTE: backups/nexora-pre-task009-20260830T222639Z.dump is ALREADY TRACKED
+# (audit finding P0-5) - this rule prevents new ones, but removing the
+# existing one requires a commit, and purging it from history requires a
+# rewrite. Both are deliberately left for an explicitly approved change.
+/backups/
+*.dump
+*.sql.gz
+
 # PKI material must never enter git - CA/server keys live at /etc/nexora/pki/ on the host
 *.key
 *.pem
@@ -66,3 +85,17 @@ node_modules/
 .pnpm-store/
 agent/**/bin/
 agent/**/obj/
+
+# Backup tooling (PR-04A): encrypted dumps, checksums, status/state files,
+# the local test GPG keyring, and off-host simulation output are all
+# disposable/local-only and must never enter git. See docs/backup-restore.md.
+/backups/
+*.dump.gpg
+*.dump.sha256
+backup-status.json
+backup-state.json
+
+# Python bytecode is generated at runtime by the monitoring/backup helpers and
+# must never be tracked or deployed.
+__pycache__/
+*.pyc

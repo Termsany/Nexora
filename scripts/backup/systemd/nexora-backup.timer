@@ -1,0 +1,19 @@
+# Nexora PostgreSQL backup timer - daily 02:00 local. NOT INSTALLED/ENABLED.
+# RPO target <= 24h; monitoring warns at 24h and criticals at 36h, so a single
+# missed nightly run warns before it becomes an incident.
+
+[Unit]
+Description=Daily Nexora PostgreSQL backup (02:00 local)
+Documentation=file:///opt/nexora/docs/backup-restore.md
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+# Run once on next boot if the host was down at 02:00 rather than silently
+# skipping a day.
+Persistent=true
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=nexora-backup.service
+
+[Install]
+WantedBy=timers.target
