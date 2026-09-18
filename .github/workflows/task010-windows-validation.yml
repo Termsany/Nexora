@@ -67,12 +67,6 @@ jobs:
           dotnet clean ".\agent\Nexora.Agent.Tests\Nexora.Agent.Tests.csproj" `
             --configuration Release
 
-          dotnet msbuild ".\agent\Nexora.Agent.Tests\Nexora.Agent.Tests.csproj" `
-            /t:Compile `
-            /p:Configuration=Release `
-            /v:diag `
-            *> ".\artifacts\task010-windows-validation\remote-desktop-msbuild-diag.log"
-
           dotnet test ".\agent\Nexora.Agent.Tests\Nexora.Agent.Tests.csproj" `
             --configuration Release `
             --filter "FullyQualifiedName~RemoteDesktop" `

@@ -18,4 +18,13 @@
   <ItemGroup>
     <ProjectReference Include="..\Nexora.Agent\Nexora.Agent.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="UpgradeStub\bin\**\*" />
+    <Compile Remove="UpgradeStub\obj\**\*" />
+    <EmbeddedResource Remove="UpgradeStub\bin\**\*" />
+    <EmbeddedResource Remove="UpgradeStub\obj\**\*" />
+    <None Remove="UpgradeStub\bin\**\*" />
+    <None Remove="UpgradeStub\obj\**\*" />
+  </ItemGroup>
 </Project>
