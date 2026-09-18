@@ -64,6 +64,9 @@ jobs:
       - name: Run Remote Desktop agent tests
         shell: powershell
         run: |
+          dotnet clean ".\agent\Nexora.Agent.Tests\Nexora.Agent.Tests.csproj" `
+            --configuration Release
+
           dotnet test ".\agent\Nexora.Agent.Tests\Nexora.Agent.Tests.csproj" `
             --configuration Release `
             --filter "FullyQualifiedName~RemoteDesktop" `
