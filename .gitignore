@@ -99,3 +99,7 @@ backup-state.json
 # must never be tracked or deployed.
 __pycache__/
 *.pyc
+
+# Nested packaging/build outputs
+publish/windows-agent/src/**/bin/
+publish/windows-agent/src/**/obj/
